@@ -81,7 +81,45 @@ class PurchaseEngine:
             logger.error(f"❌ Failed to navigate to product: {e}")
             return False
     
-    async def add_to_cart(self) -> bool:
+    async def get_item_price(self) -> float:
+        """Extract item price from product page (generic selector)."""
+        try:
+            # Try common price selectors
+            price_selectors = [
+                '[class*="price" i]',
+                '[class*="Price" i]',
+                '[id*="price" i]',
+                'span[class*="price" i]',
+                'div[class*="price" i]',
+                '[class*="amount" i]',
+                '[class*="cost" i]',
+            ]
+            
+            price_text = None
+            for selector in price_selectors:
+                element = await self.page.query_selector(selector)
+                if element:
+                    price_text = await element.inner_text()
+                    break
+            
+            if not price_text:
+                logger.warning("⚠️  Could not find price on this page")
+                return None
+            
+            # Clean price text (remove $, commas, etc.)
+            import re
+            price_match = re.search(r'\d+\.?\d*', price_text.replace(',', ''))
+            if price_match:
+                price = float(price_match.group())
+                logger.info(f"💰 Detected item price: ${price}")
+                return price
+            
+            logger.warning(f"⚠️  Could not parse price from: {price_text}")
+            return None
+        except Exception as e:
+            logger.error(f"❌ Error getting price: {e}")
+            return None
+    
         """Add item to cart (generic selector)."""
         try:
             # Try common selectors for "Add to Cart" button
@@ -173,7 +211,8 @@ class PurchaseEngine:
             "account_id": account.get("id"),
             "product_url": product_url,
             "timestamp": datetime.now().isoformat(),
-            "error": None
+            "error": None,
+            "item_price": None
         }
         
         try:
@@ -186,6 +225,19 @@ class PurchaseEngine:
             if not await self.navigate_to_product(product_url):
                 result["error"] = "Failed to navigate to product"
                 return result
+            
+            # Get item price and check against limit
+            item_price = await self.get_item_price()
+            result["item_price"] = item_price
+            
+            price_limit = account.get("price_limit_per_item")
+            if price_limit and item_price:
+                if item_price > price_limit:
+                    result["error"] = f"Item price (${item_price}) exceeds limit (${price_limit})"
+                    logger.warning(f"⚠️  {result['error']}")
+                    return result
+            elif item_price is None:
+                logger.warning("⚠️  Could not detect price, proceeding with caution")
             
             # Add to cart
             if not await self.add_to_cart():
@@ -203,7 +255,7 @@ class PurchaseEngine:
                 return result
             
             result["success"] = True
-            logger.info(f"🎉 Purchase successful for {account.get('id')}")
+            logger.info(f"🎉 Purchase successful for {account.get('id')} (${item_price})")
             
         except Exception as e:
             result["error"] = str(e)

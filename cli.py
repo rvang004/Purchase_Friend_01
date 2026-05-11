@@ -79,7 +79,13 @@ class SetupWizard:
             monthly_limit = float(input("Monthly spending limit ($): "))
         except ValueError:
             monthly_limit = 1000.0
-            print(f"⚠️  Using default limit: ${monthly_limit}")
+            print(f"⚠️  Using default monthly limit: ${monthly_limit}")
+        
+        try:
+            price_limit = float(input("Max price per item/quantity ($): "))
+        except ValueError:
+            price_limit = 500.0
+            print(f"⚠️  Using default price per item: ${price_limit}")
         
         self.accounts = self.cred_manager.add_account(
             self.accounts,
@@ -88,7 +94,8 @@ class SetupWizard:
             email,
             password,
             payment_method,
-            monthly_limit
+            monthly_limit,
+            price_limit
         )
         
         if self.cred_manager.save_credentials(self.accounts):
@@ -107,14 +114,16 @@ class SetupWizard:
         
         for account_id, account in self.accounts.items():
             email_masked = account["email"][:3] + "***@***"
-            limit = account["monthly_limit"]
+            monthly_limit = account["monthly_limit"]
+            price_limit = account.get("price_limit_per_item", "N/A")
             spent = account.get("spent_this_month", 0)
             
             print(f"\n🔐 {account_id}")
             print(f"   Site: {account['site']}")
             print(f"   Email: {email_masked}")
             print(f"   Payment: {account['payment_method']}")
-            print(f"   Limit: ${limit} (Spent: ${spent:.2f})")
+            print(f"   Monthly Limit: ${monthly_limit} (Spent: ${spent:.2f})")
+            print(f"   Price Per Item: ${price_limit}")
     
     def add_purchase_task(self):
         """Add a new purchase task."""

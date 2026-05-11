@@ -41,10 +41,12 @@ python main.py setup
    - Email/username
    - Password
    - Payment method (1-4)
-   - Monthly spending limit
+   - Monthly spending limit (e.g., $500)
+   - Max price per item (e.g., $100)
 
 2. View accounts
    - See all configured accounts (passwords masked)
+   - Shows monthly limit AND price per item
 
 3. Add purchase task
    - Select account
@@ -85,8 +87,38 @@ python main.py run
 **The scheduler will:**
 - Check for tasks every 60 seconds
 - Execute purchases at their scheduled times
+- **Automatically check item price** against your limit
+- Block purchases that exceed price caps
 - Log all activity
 - Stop when you press `Ctrl+C`
+
+---
+
+## 4.5 **Understanding Price Protection**
+
+Each account has **TWO price safeguards**:
+
+### 🛡️ Per-Item Price Limit
+- Maximum price per individual purchase
+- Example: "Don't buy items over $100"
+- Bot detects price and blocks if exceeded
+- You'll see in logs: `⚠️  Item price exceeds limit`
+
+### 🛡️ Monthly Spending Limit
+- Total spending cap for the month
+- Example: "Don't spend more than $500/month"
+- Tracks all purchases throughout month
+- Resets each new month
+
+**Both work together:**
+```
+Monthly limit: $500 (prevents overspending)
+Price per item: $100 (prevents expensive impulse buys)
+
+✅ Item costs $45 → ALLOWED (under both limits)
+❌ Item costs $150 → BLOCKED (exceeds per-item limit)
+❌ Monthly total $520 → BLOCKED (exceeds monthly limit)
+```
 
 ---
 

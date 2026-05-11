@@ -126,7 +126,7 @@ Days: Mon,Wed,Fri
 
 ---
 
-## 💳 Payment Methods
+## 💳 Payment Methods & Spending Limits
 
 Supported payment methods per account:
 - Credit Card
@@ -136,18 +136,30 @@ Supported payment methods per account:
 
 Each account can have:
 - Different payment method
-- Monthly spending limit
+- Monthly spending limit (total per month)
+- **Price cap per item** (max price per individual purchase)
 - Individual tracking of monthly spend
 
-**Example:**
+**Price Protection - Two Layers:**
+- Monthly Limit: Total spending cap (e.g., max $500/month)
+- Price Per Item: Per-purchase cap (e.g., max $100/item)
+- Both limits work together for safety
+
+**Example Account:**
 ```json
 {
   "account_id": "amazon_main",
   "payment_method": "credit_card",
   "monthly_limit": 500.00,
+  "price_limit_per_item": 100.00,
   "spent_this_month": 125.50
 }
 ```
+
+In this example:
+- Won't purchase items over $100 each
+- Won't allow total monthly spending over $500
+- Currently spent $125.50 this month
 
 ---
 
@@ -219,6 +231,51 @@ Replace `C:\path\to\purchase-bot` with your actual path.
 1. Click **OK** to save
 2. Right-click the task → **Run** to test immediately
 3. Check `purchase_bot.log` for output
+
+---
+
+## 💰 Price Checking
+
+Every purchase is protected by **dual-layer price limits**:
+
+### Per-Item Price Cap
+Before purchasing, the bot automatically:
+1. **Detects** the item price from the product page
+2. **Compares** against your account's `price_limit_per_item`
+3. **Blocks** purchase if price exceeds limit
+4. **Logs** the blocked purchase attempt
+
+**Example Scenario:**
+```
+Account: amazon_main
+Price limit per item: $100.00
+Product URL: https://amazon.com/dp/B123
+Detected price: $125.00
+
+Result: ❌ BLOCKED
+Reason: Item price ($125.00) exceeds limit ($100.00)
+Log entry: ⚠️  Item price exceeds limit (logs in purchase_bot.log)
+```
+
+### Monthly Spending Limit
+Separately tracked and enforced:
+- Prevents total monthly spending over threshold
+- Resets each calendar month
+- Works with per-item limit (both must pass)
+
+### Log Example
+```
+2025-01-15 14:31:10 - INFO - 💰 Detected item price: $45.99
+2025-01-15 14:31:11 - INFO - ✅ Price within limit ($45.99 <= $100.00)
+2025-01-15 14:31:15 - INFO - ✅ Item added to cart
+2025-01-15 14:32:10 - INFO - 🎉 Purchase successful (item was $45.99)
+
+--- OR (if price too high) ---
+
+2025-01-15 14:31:10 - INFO - 💰 Detected item price: $150.00
+2025-01-15 14:31:11 - WARNING - ⚠️  Item price ($150.00) exceeds limit ($100.00)
+2025-01-15 14:31:12 - ERROR - ❌ Purchase failed: Item price exceeds limit
+```
 
 ---
 
