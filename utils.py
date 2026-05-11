@@ -64,7 +64,8 @@ class CredentialManager:
     
     def add_account(self, accounts: dict, account_id: str, site: str, 
                     email: str, password: str, payment_method: str, 
-                    monthly_limit: float, price_limit_per_item: float) -> dict:
+                    monthly_limit: float, price_limit_per_item: float, 
+                    price_limit_enabled: bool = True) -> dict:
         """Add a new account securely."""
         accounts[account_id] = {
             "site": site,
@@ -73,6 +74,7 @@ class CredentialManager:
             "payment_method": payment_method,
             "monthly_limit": monthly_limit,
             "price_limit_per_item": price_limit_per_item,
+            "price_limit_enabled": price_limit_enabled,
             "spent_this_month": 0.0
         }
         return accounts

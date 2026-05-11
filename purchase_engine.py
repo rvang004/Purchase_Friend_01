@@ -120,6 +120,7 @@ class PurchaseEngine:
             logger.error(f"❌ Error getting price: {e}")
             return None
     
+    async def add_to_cart(self) -> bool:
         """Add item to cart (generic selector)."""
         try:
             # Try common selectors for "Add to Cart" button
@@ -230,14 +231,19 @@ class PurchaseEngine:
             item_price = await self.get_item_price()
             result["item_price"] = item_price
             
+            # Check if price limit is enabled
+            price_limit_enabled = account.get("price_limit_enabled", True)
             price_limit = account.get("price_limit_per_item")
-            if price_limit and item_price:
+            
+            if price_limit_enabled and price_limit and item_price:
                 if item_price > price_limit:
                     result["error"] = f"Item price (${item_price}) exceeds limit (${price_limit})"
                     logger.warning(f"⚠️  {result['error']}")
                     return result
-            elif item_price is None:
+            elif item_price is None and price_limit_enabled:
                 logger.warning("⚠️  Could not detect price, proceeding with caution")
+            elif not price_limit_enabled:
+                logger.info("🔓 Price limit disabled for this account, skipping price check")
             
             # Add to cart
             if not await self.add_to_cart():

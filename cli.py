@@ -40,7 +40,8 @@ class SetupWizard:
         print("4. View purchase tasks")
         print("5. Delete account")
         print("6. Delete purchase task")
-        print("7. Exit")
+        print("7. Toggle price limit on/off")
+        print("8. Exit")
         print("="*50)
     
     def add_account(self):
@@ -87,6 +88,9 @@ class SetupWizard:
             price_limit = 500.0
             print(f"⚠️  Using default price per item: ${price_limit}")
         
+        enable_limit = input("Enable price limit? (yes/no, default yes): ").lower().strip()
+        price_limit_enabled = enable_limit != "no"
+        
         self.accounts = self.cred_manager.add_account(
             self.accounts,
             account_id,
@@ -95,7 +99,8 @@ class SetupWizard:
             password,
             payment_method,
             monthly_limit,
-            price_limit
+            price_limit,
+            price_limit_enabled
         )
         
         if self.cred_manager.save_credentials(self.accounts):
@@ -116,14 +121,17 @@ class SetupWizard:
             email_masked = account["email"][:3] + "***@***"
             monthly_limit = account["monthly_limit"]
             price_limit = account.get("price_limit_per_item", "N/A")
+            price_enabled = account.get("price_limit_enabled", True)
             spent = account.get("spent_this_month", 0)
+            
+            limit_status = "🔐 ON" if price_enabled else "🔓 OFF"
             
             print(f"\n🔐 {account_id}")
             print(f"   Site: {account['site']}")
             print(f"   Email: {email_masked}")
             print(f"   Payment: {account['payment_method']}")
             print(f"   Monthly Limit: ${monthly_limit} (Spent: ${spent:.2f})")
-            print(f"   Price Per Item: ${price_limit}")
+            print(f"   Price Per Item: ${price_limit} {limit_status}")
     
     def add_purchase_task(self):
         """Add a new purchase task."""
@@ -240,11 +248,35 @@ class SetupWizard:
         else:
             print("❌ Task not found")
     
+    def toggle_price_limit(self):
+        """Toggle price limit on/off for an account."""
+        self.view_accounts()
+        
+        if not self.accounts:
+            print("\n❌ No accounts found")
+            return
+        
+        account_id = input("\nEnter account ID to toggle: ").strip()
+        
+        if account_id not in self.accounts:
+            print("❌ Account not found")
+            return
+        
+        current_state = self.accounts[account_id].get("price_limit_enabled", True)
+        new_state = not current_state
+        self.accounts[account_id]["price_limit_enabled"] = new_state
+        
+        if self.cred_manager.save_credentials(self.accounts):
+            status = "🔓 ENABLED" if new_state else "🔒 DISABLED"
+            print(f"✅ Price limit {status} for {account_id}")
+        else:
+            print("❌ Failed to update account")
+    
     def run(self):
         """Main wizard loop."""
         while True:
             self.show_menu()
-            choice = input("Select an option (1-7): ").strip()
+            choice = input("Select an option (1-8): ").strip()
             
             if choice == "1":
                 self.add_account()
@@ -259,6 +291,8 @@ class SetupWizard:
             elif choice == "6":
                 self.delete_task()
             elif choice == "7":
+                self.toggle_price_limit()
+            elif choice == "8":
                 print("\n👋 Goodbye!")
                 break
             else:
