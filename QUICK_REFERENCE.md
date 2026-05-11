@@ -40,7 +40,8 @@ python main.py run --interval 30
 | **4** | View all purchase tasks |
 | **5** | Delete account |
 | **6** | Delete purchase task |
-| **7** | Exit |
+| **7** | Toggle price limit on/off for any account |
+| **8** | Exit |
 
 ---
 

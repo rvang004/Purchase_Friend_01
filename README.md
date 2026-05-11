@@ -7,6 +7,8 @@ A secure, automated e-commerce purchase scheduler. Set it once, run it forever.
 - ✅ Multiple accounts per site with individual spending limits
 - ✅ Encrypted credential storage (AES encryption via cryptography)
 - ✅ Flexible scheduling (once, daily, weekly)
+- ✅ **Dual-layer price protection** (per-item + monthly limits)
+- ✅ **Toggle price limits** on/off per account
 - ✅ Dry-run mode for testing
 - ✅ Windows Task Scheduler integration
 - ✅ Full logging and error handling
@@ -276,6 +278,32 @@ Separately tracked and enforced:
 2025-01-15 14:31:11 - WARNING - ⚠️  Item price ($150.00) exceeds limit ($100.00)
 2025-01-15 14:31:12 - ERROR - ❌ Purchase failed: Item price exceeds limit
 ```
+
+---
+
+## 🔓 Price Limit Toggle
+
+Enable or disable price checking per account **without deleting** the account.
+
+### Quick Example
+```powershell
+python main.py setup
+# Option 7: Toggle price limit on/off
+# Enter account ID: amazon_main
+# ✅ Price limit DISABLED for amazon_main
+```
+
+Status icons when viewing accounts:
+- 🔓 **ON** — Price limit is enforced (purchases checked)
+- 🔒 **OFF** — Price limit is disabled (purchases allowed)
+
+### When to Use
+- Testing new e-commerce sites
+- Temporarily buying expensive items
+- Budget mode on/off switching
+- Debugging price detection issues
+
+See **PRICE_LIMIT_TOGGLE.md** for complete documentation.
 
 ---
 
