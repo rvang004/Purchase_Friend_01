@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Purchase Bot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { theme: { extend: { colors: {
+    primary: "#0053e2", spark: "#ffc220"
+  }}}}</script>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800 text-sm">
+
+<!-- Header -->
+<header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-3 sticky top-0 z-10 shadow-sm">
+  <span class="text-xl">🛒</span>
+  <h1 class="font-bold text-base">Purchase Bot</h1>
+  <nav class="ml-8 flex gap-1">
+    <a href="/?tab=accounts"
+       class="px-4 py-1.5 rounded-full font-medium transition
+              {% if tab == 'accounts' %}bg-primary text-white{% else %}text-gray-500 hover:bg-gray-100{% endif %}">
+      Accounts
+    </a>
+    <a href="/?tab=tasks"
+       class="px-4 py-1.5 rounded-full font-medium transition
+              {% if tab == 'tasks' %}bg-primary text-white{% else %}text-gray-500 hover:bg-gray-100{% endif %}">
+      Tasks
+    </a>
+  </nav>
+  {% if msg %}
+  <span class="ml-auto text-green-600 font-medium">✓ {{ msg }}</span>
+  {% endif %}
+</header>
+
+<main class="max-w-4xl mx-auto px-4 py-8 space-y-6">
+
+<!-- ═══════════════════ ACCOUNTS TAB ═══════════════════ -->
+{% if tab == "accounts" %}
+
+<!-- Add Account Form -->
+<section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+  <h2 class="font-semibold text-gray-700 mb-5">Add Account</h2>
+  <form method="POST" action="/accounts/add" class="space-y-4">
+
+    <div class="grid md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Account ID <span class="text-red-400">*</span></label>
+        <input name="account_id" required placeholder="e.g. samsclub_main"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Website URL <span class="text-red-400">*</span></label>
+        <input name="site" required placeholder="https://www.samsclub.com/auth/signin"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Email <span class="text-red-400">*</span></label>
+        <input name="email" type="email" required placeholder="you@example.com"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Password <span class="text-red-400">*</span></label>
+        <input name="password" type="password" required
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Payment Method</label>
+        <select name="payment_method"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary">
+          <option value="credit_card">Credit Card</option>
+          <option value="debit_card">Debit Card</option>
+          <option value="digital_wallet">Digital Wallet</option>
+          <option value="store_credit">Store Credit</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Monthly Spending Limit ($)</label>
+        <input name="monthly_limit" type="number" min="0" step="0.01" value="1000"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Max Price Per Item ($)</label>
+        <input name="price_limit_per_item" type="number" min="0" step="0.01" value="500"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Max Quantity Per Purchase</label>
+        <input name="quantity_limit" type="number" min="1" placeholder="No limit"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+      </div>
+    </div>
+
+    <!-- Shipping Address -->
+    <div class="border-t border-gray-100 pt-4">
+      <label class="flex items-center gap-2 cursor-pointer select-none">
+        <input type="checkbox" name="use_default_address" id="useDefault" checked
+               class="rounded border-gray-300 text-primary"
+               onchange="document.getElementById('addrFields').classList.toggle('hidden', this.checked)"/>
+        <span class="text-xs font-medium text-gray-600">Use the default address already saved on this site</span>
+      </label>
+      <div id="addrFields" class="hidden mt-4 grid md:grid-cols-2 gap-4">
+        <div class="md:col-span-2">
+          <label class="block text-xs font-medium text-gray-500 mb-1">Full Name</label>
+          <input name="full_name" placeholder="Jane Smith"
+                 class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-xs font-medium text-gray-500 mb-1">Address Line 1</label>
+          <input name="line1" placeholder="123 Main St"
+                 class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-xs font-medium text-gray-500 mb-1">Address Line 2</label>
+          <input name="line2" placeholder="Apt 4B (optional)"
+                 class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">City</label>
+          <input name="city" class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">State</label>
+          <input name="state" class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">ZIP Code</label>
+          <input name="zip_code" class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Country</label>
+          <input name="country" value="US" class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+        </div>
+      </div>
+    </div>
+
+    <button type="submit"
+            class="bg-primary text-white font-semibold px-6 py-2 rounded-lg hover:bg-blue-700 transition">
+      Add Account
+    </button>
+  </form>
+</section>
+
+<!-- Accounts List -->
+<section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+  <h2 class="font-semibold text-gray-700 mb-4">Your Accounts</h2>
+  {% if not accounts %}
+    <p class="text-gray-300 text-center py-8">No accounts yet — add one above.</p>
+  {% else %}
+  <div class="space-y-3">
+    {% for id, acc in accounts.items() %}
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-gray-100 bg-gray-50">
+      <div class="space-y-0.5 flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <span class="font-semibold text-gray-800">{{ id }}</span>
+          {% if acc.get("price_limit_enabled", true) %}
+            <span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">Price cap ON</span>
+          {% else %}
+            <span class="px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700">Price cap OFF</span>
+          {% endif %}
+        </div>
+        <div class="text-xs text-gray-400 truncate">{{ acc.site }}</div>
+        <div class="text-xs text-gray-500 flex flex-wrap gap-3 mt-1">
+          <span>💳 {{ acc.payment_method.replace("_"," ").title() }}</span>
+          <span>📅 Limit: ${{ acc.monthly_limit }} (spent: ${{ "%.2f"|format(acc.get("spent_this_month",0)) }})</span>
+          <span>💰 Per item: ${{ acc.price_limit_per_item }}</span>
+          <span>📦 Qty cap: {{ acc.quantity_limit_per_item if acc.quantity_limit_per_item else "None" }}</span>
+          <span>🏠 {{ acc.shipping_address.line1 ~ ", " ~ acc.shipping_address.city if acc.shipping_address else "Site default" }}</span>
+        </div>
+      </div>
+      <div class="flex gap-2 shrink-0">
+        <form method="POST" action="/accounts/toggle-price-limit">
+          <input type="hidden" name="account_id" value="{{ id }}"/>
+          <button class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium hover:bg-gray-100 transition">
+            Toggle Cap
+          </button>
+        </form>
+        <form method="POST" action="/accounts/delete"
+              onsubmit="return confirm('Delete account {{ id }}?')">
+          <input type="hidden" name="account_id" value="{{ id }}"/>
+          <button class="px-3 py-1.5 rounded-lg border border-red-200 text-red-500 text-xs font-medium hover:bg-red-50 transition">
+            Delete
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+<!-- ═══════════════════ TASKS TAB ═══════════════════ -->
+{% elif tab == "tasks" %}
+
+<!-- Add Task Form -->
+<section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+  <h2 class="font-semibold text-gray-700 mb-5">Add Purchase Task</h2>
+  {% if not accounts %}
+    <p class="text-yellow-600 bg-yellow-50 rounded-lg px-4 py-3 text-sm">
+      No accounts yet. <a href="/?tab=accounts" class="underline font-medium">Add one first →</a>
+    </p>
+  {% else %}
+  <form method="POST" action="/tasks/add" class="space-y-4">
+    <div class="grid md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Account <span class="text-red-400">*</span></label>
+        <select name="account_id" required
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary">
+          {% for id in accounts %}
+          <option value="{{ id }}">{{ id }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Quantity</label>
+        <input name="quantity" type="number" min="1" value="1"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-xs font-medium text-gray-500 mb-1">Product URL <span class="text-red-400">*</span></label>
+        <input name="product_url" required placeholder="https://www.samsclub.com/p/..."
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Schedule</label>
+        <select name="schedule_type" id="scheduleType" onchange="toggleDays()"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary">
+          <option value="once">Once</option>
+          <option value="daily" selected>Daily</option>
+          <option value="weekly">Weekly (specific days)</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Time (24h)</label>
+        <input name="run_time" type="time" value="09:00"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+      </div>
+      <div id="daysRow" class="md:col-span-2 hidden">
+        <label class="block text-xs font-medium text-gray-500 mb-1">Days (comma-separated)</label>
+        <input name="days" placeholder="Mon,Wed,Fri"
+               class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-primary"/>
+      </div>
+    </div>
+    <button type="submit"
+            class="bg-primary text-white font-semibold px-6 py-2 rounded-lg hover:bg-blue-700 transition">
+      Add Task
+    </button>
+  </form>
+  {% endif %}
+</section>
+
+<!-- Tasks List -->
+<section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+  <h2 class="font-semibold text-gray-700 mb-4">Scheduled Tasks</h2>
+  {% if not tasks %}
+    <p class="text-gray-300 text-center py-8">No tasks yet — add one above.</p>
+  {% else %}
+  <div class="space-y-3">
+    {% for task in tasks %}
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-gray-100 bg-gray-50">
+      <div class="space-y-0.5 flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <span class="font-semibold text-gray-800">{{ task.id }}</span>
+          <span class="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-600">{{ task.account_id }}</span>
+        </div>
+        <div class="text-xs text-gray-400 truncate" title="{{ task.product_url }}">{{ task.product_url }}</div>
+        <div class="text-xs text-gray-500 flex flex-wrap gap-3 mt-1">
+          <span>⏰ {{ task.schedule_type.title() }} @ {{ task.run_time }}</span>
+          {% if task.schedule_type == "weekly" %}
+            <span>📅 {{ task.days | join(", ") }}</span>
+          {% endif %}
+          <span>📦 Qty: {{ task.quantity }}</span>
+          <span>🕐 Last run: {{ task.last_run[:16].replace("T"," ") if task.last_run else "Never" }}</span>
+        </div>
+      </div>
+      <form method="POST" action="/tasks/delete"
+            onsubmit="return confirm('Delete task {{ task.id }}?')">
+        <input type="hidden" name="task_id" value="{{ task.id }}"/>
+        <button class="px-3 py-1.5 rounded-lg border border-red-200 text-red-500 text-xs font-medium hover:bg-red-50 transition shrink-0">
+          Delete
+        </button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+{% endif %}
+</main>
+
+<script>
+function toggleDays() {
+  const sel = document.getElementById("scheduleType");
+  document.getElementById("daysRow").classList.toggle("hidden", sel.value !== "weekly");
+}
+</script>
+</body>
+</html>
