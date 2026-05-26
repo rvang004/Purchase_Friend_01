@@ -2,10 +2,15 @@ name: Purchase Bot
 
 on:
   schedule:
-    # Runs every 30 minutes — adjust to match your task schedules.
-    # Uses UTC. Convert your local time: https://dateful.com/convert/utc
+    # Every 30 minutes. Adjust cron to match your task schedule times.
+    # Converter: https://dateful.com/convert/utc
     - cron: '*/30 * * * *'
-  workflow_dispatch:  # lets you trigger manually from GitHub UI
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to commit status.json back to the repo
+  pages: write
+  id-token: write
 
 jobs:
   run:
@@ -29,8 +34,8 @@ jobs:
       - name: Restore credentials & config
         env:
           CREDENTIALS_ENC: ${{ secrets.CREDENTIALS_ENC }}
-          MASTER_KEY: ${{ secrets.MASTER_KEY }}
-          CONFIG_JSON: ${{ secrets.CONFIG_JSON }}
+          MASTER_KEY:       ${{ secrets.MASTER_KEY }}
+          CONFIG_JSON:      ${{ secrets.CONFIG_JSON }}
         run: |
           echo "$CREDENTIALS_ENC" | base64 -d > credentials.enc
           echo "$MASTER_KEY"      | base64 -d > .master_key
@@ -39,6 +44,22 @@ jobs:
       - name: Run Purchase Bot (one-shot)
         run: python main.py run --once
 
+      - name: Build dashboard status
+        run: python build_status.py
+
+      - name: Commit & push status.json
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/status.json
+          git diff --staged --quiet || git commit -m "chore: update dashboard status [skip ci]"
+          git push
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -46,3 +67,14 @@ jobs:
           name: purchase-bot-log
           path: purchase_bot.log
           retention-days: 7
+
+  deploy-pages:
+    needs: run
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
