@@ -1,0 +1,48 @@
+name: Purchase Bot
+
+on:
+  schedule:
+    # Runs every 30 minutes — adjust to match your task schedules.
+    # Uses UTC. Convert your local time: https://dateful.com/convert/utc
+    - cron: '*/30 * * * *'
+  workflow_dispatch:  # lets you trigger manually from GitHub UI
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright cryptography
+          playwright install chromium --with-deps
+
+      - name: Restore credentials & config
+        env:
+          CREDENTIALS_ENC: ${{ secrets.CREDENTIALS_ENC }}
+          MASTER_KEY: ${{ secrets.MASTER_KEY }}
+          CONFIG_JSON: ${{ secrets.CONFIG_JSON }}
+        run: |
+          echo "$CREDENTIALS_ENC" | base64 -d > credentials.enc
+          echo "$MASTER_KEY"      | base64 -d > .master_key
+          echo "$CONFIG_JSON"     | base64 -d > config.json
+
+      - name: Run Purchase Bot (one-shot)
+        run: python main.py run --once
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: purchase-bot-log
+          path: purchase_bot.log
+          retention-days: 7

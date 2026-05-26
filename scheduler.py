@@ -104,14 +104,24 @@ class PurchaseScheduler:
         # Check spending limit
         spent = account.get("spent_this_month", 0)
         limit = account.get("monthly_limit", float('inf'))
-        
+
         if spent >= limit:
             logger.warning(f"⚠️  {account_id} has reached monthly limit (${spent:.2f}/${limit})")
             return {"success": False, "error": "Monthly limit reached"}
-        
+
+        # Check quantity cap
+        quantity = task.get("quantity", 1)
+        qty_limit = account.get("quantity_limit_per_item")
+        if qty_limit is not None and quantity > qty_limit:
+            logger.warning(
+                f"⚠️  Task quantity ({quantity}) exceeds account limit ({qty_limit}) "
+                f"for {account_id} — purchase blocked"
+            )
+            return {"success": False, "error": f"Quantity {quantity} exceeds limit {qty_limit}"}
+
         logger.info(f"🚀 Starting purchase for task {task['id']} using account {account_id}")
-        
-        result = await run_purchase(account, task["product_url"], dry_run=dry_run)
+
+        result = await run_purchase(account, task["product_url"], quantity=quantity, dry_run=dry_run)
         
         if result["success"]:
             logger.info(f"✅ Purchase successful: {task['id']}")
@@ -122,6 +132,40 @@ class PurchaseScheduler:
         
         return result
     
+    async def run_once(self, dry_run: bool = False):
+        """
+        Single check cycle — loads tasks, runs whatever is due, then exits.
+        Used by GitHub Actions so the workflow doesn't run forever.
+        """
+        config = self.load_config()
+        current_time = datetime.now()
+
+        logger.info(f"⏰ One-shot check at {current_time.strftime('%H:%M:%S')}")
+
+        tasks_to_run = [
+            t for t in config["tasks"]
+            if self.check_if_should_run(t, current_time)
+        ]
+
+        if not tasks_to_run:
+            logger.info("💤 No tasks due right now — exiting")
+            return
+
+        logger.info(f"🎯 Found {len(tasks_to_run)} task(s) to execute")
+
+        results = await asyncio.gather(*[
+            self.execute_task(task, dry_run=dry_run)
+            for task in tasks_to_run
+        ])
+
+        for task in tasks_to_run:
+            for config_task in config["tasks"]:
+                if config_task["id"] == task["id"]:
+                    config_task["last_run"] = task.get("last_run")
+
+        self.save_config(config)
+        logger.info(f"📊 Done: {sum(1 for r in results if r['success'])}/{len(results)} successful")
+
     async def run_scheduler(self, interval: int = 60, dry_run: bool = False):
         """
         Main scheduler loop.

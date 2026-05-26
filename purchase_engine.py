@@ -120,6 +120,34 @@ class PurchaseEngine:
             logger.error(f"❌ Error getting price: {e}")
             return None
     
+    async def set_quantity(self, quantity: int) -> bool:
+        """Set item quantity on product page (generic selector)."""
+        if quantity <= 1:
+            return True  # default is usually 1, nothing to do
+        try:
+            qty_selectors = [
+                'select[name*="quantity" i]',
+                'input[name*="quantity" i]',
+                'input[id*="quantity" i]',
+                'input[aria-label*="quantity" i]',
+            ]
+            for selector in qty_selectors:
+                element = await self.page.query_selector(selector)
+                if element:
+                    tag = await element.evaluate("el => el.tagName.toLowerCase()")
+                    if tag == "select":
+                        await element.select_option(str(quantity))
+                    else:
+                        await element.triple_click()
+                        await element.type(str(quantity))
+                    logger.info(f"🔢 Quantity set to {quantity}")
+                    return True
+            logger.warning("⚠️  Could not find quantity input — defaulting to 1")
+            return False
+        except Exception as e:
+            logger.error(f"❌ Failed to set quantity: {e}")
+            return False
+
     async def add_to_cart(self) -> bool:
         """Add item to cart (generic selector)."""
         try:
@@ -149,6 +177,97 @@ class PurchaseEngine:
             logger.error(f"❌ Failed to add to cart: {e}")
             return False
     
+    async def select_shipping_address(self, address: dict = None) -> bool:
+        """
+        Confirm the shipping address at checkout.
+
+        If `address` is None: click the default/first saved address on the page.
+        If `address` has data: fill in the address form fields.
+        """
+        try:
+            # --- Case 1: site has saved addresses, click the default one ---
+            saved_address_selectors = [
+                'input[type="radio"][name*="address" i]:first-of-type',
+                '[class*="address-book" i] input[type="radio"]:first-of-type',
+            ]
+            confirm_selectors = [
+                'button:has-text("Deliver to this address")',
+                'button:has-text("Use this address")',
+                'button:has-text("Ship to this address")',
+                'button:has-text("Deliver here")',
+                '[class*="ship-to" i] button',
+                '[class*="address" i] button[type="submit"]',
+            ]
+
+            for sel in confirm_selectors:
+                btn = await self.page.query_selector(sel)
+                if btn:
+                    if self.dry_run:
+                        logger.info("🔄 DRY RUN: Would confirm default shipping address")
+                        return True
+                    await btn.click()
+                    await self.page.wait_for_load_state("networkidle")
+                    logger.info("✅ Default shipping address confirmed")
+                    return True
+
+            # Try selecting the first radio option then confirming
+            for sel in saved_address_selectors:
+                radio = await self.page.query_selector(sel)
+                if radio:
+                    await radio.click()
+                    for confirm_sel in confirm_selectors:
+                        btn = await self.page.query_selector(confirm_sel)
+                        if btn:
+                            if self.dry_run:
+                                logger.info("🔄 DRY RUN: Would confirm saved address")
+                                return True
+                            await btn.click()
+                            await self.page.wait_for_load_state("networkidle")
+                            logger.info("✅ Saved address selected and confirmed")
+                            return True
+
+            # --- Case 2: no saved address found, fill in form fields ---
+            if address:
+                field_map = [
+                    ('input[name*="fullName" i], input[name*="full_name" i], input[name*="name" i]',
+                     address.get("full_name", "")),
+                    ('input[name*="address1" i], input[name*="line1" i], input[id*="addressLine1" i]',
+                     address.get("line1", "")),
+                    ('input[name*="address2" i], input[name*="line2" i], input[id*="addressLine2" i]',
+                     address.get("line2", "")),
+                    ('input[name*="city" i], input[id*="city" i]',
+                     address.get("city", "")),
+                    ('input[name*="state" i], select[name*="state" i]',
+                     address.get("state", "")),
+                    ('input[name*="zip" i], input[name*="postal" i], input[id*="zipCode" i]',
+                     address.get("zip_code", "")),
+                ]
+                filled = 0
+                for selector, value in field_map:
+                    if not value:
+                        continue
+                    el = await self.page.query_selector(selector)
+                    if el:
+                        tag = await el.evaluate("el => el.tagName.toLowerCase()")
+                        if tag == "select":
+                            await el.select_option(value)
+                        else:
+                            await el.triple_click()
+                            await el.type(value)
+                        filled += 1
+
+                if filled:
+                    logger.info(f"✅ Filled {filled} address field(s) from stored address")
+                    return True
+
+            # Nothing matched — site likely auto-applies the default, proceed
+            logger.info("ℹ️  No address picker found — site will use its saved default")
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Error selecting shipping address: {e}")
+            return False
+
     async def checkout(self) -> bool:
         """Proceed to checkout."""
         try:
@@ -205,7 +324,7 @@ class PurchaseEngine:
             logger.error(f"❌ Failed to complete purchase: {e}")
             return False
     
-    async def execute_purchase(self, account: dict, product_url: str) -> dict:
+    async def execute_purchase(self, account: dict, product_url: str, quantity: int = 1) -> dict:
         """Execute full purchase flow."""
         result = {
             "success": False,
@@ -226,6 +345,9 @@ class PurchaseEngine:
             if not await self.navigate_to_product(product_url):
                 result["error"] = "Failed to navigate to product"
                 return result
+
+            # Set quantity before adding to cart
+            await self.set_quantity(quantity)
             
             # Get item price and check against limit
             item_price = await self.get_item_price()
@@ -254,7 +376,10 @@ class PurchaseEngine:
             if not await self.checkout():
                 result["error"] = "Checkout failed"
                 return result
-            
+
+            # Select / confirm shipping address
+            await self.select_shipping_address(account.get("shipping_address"))
+
             # Complete purchase
             if not await self.complete_purchase():
                 result["error"] = "Failed to complete purchase"
@@ -270,13 +395,13 @@ class PurchaseEngine:
         return result
 
 
-async def run_purchase(account: dict, product_url: str, dry_run: bool = False) -> dict:
+async def run_purchase(account: dict, product_url: str, quantity: int = 1, dry_run: bool = False) -> dict:
     """Standalone function to execute a single purchase."""
     engine = PurchaseEngine(headless=True, dry_run=dry_run)
-    
+
     try:
         await engine.initialize()
-        result = await engine.execute_purchase(account, product_url)
+        result = await engine.execute_purchase(account, product_url, quantity=quantity)
         return result
     finally:
         await engine.close()
