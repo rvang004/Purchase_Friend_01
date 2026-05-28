@@ -1,10 +1,15 @@
 """
 Web UI server for Purchase Bot.
-Run with: python server.py
+
+Easiest way to start:
+    Windows: double-click start_ui.bat
+    Manual:  python server.py
+
 Then open: http://localhost:8100
 """
 
 import json
+import os
 import uuid
 import webbrowser
 from datetime import datetime
