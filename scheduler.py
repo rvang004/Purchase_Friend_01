@@ -8,11 +8,12 @@ import argparse
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any
 
-from models import Account, PurchaseResult, PurchaseTask
+from models import Account, PurchaseResult, PurchaseTask, is_window_schedule, parse_time_string
 from purchase_engine import run_purchase
 from purchase_history import PurchaseHistory
 from purchase_policy import spend_amount, validate_purchase_result, validate_task_for_account
@@ -82,28 +83,79 @@ class PurchaseScheduler:
         if task is None or not task.enabled:
             return False
 
-        task_time = datetime.strptime(task.run_time, "%H:%M").time()
-        current_date = current_time.date()
+        task_now = self._time_for_task(current_time, task)
+        current_date = task_now.date()
 
+        if is_window_schedule(task.schedule_type):
+            return self._window_should_run(task, raw_task, task_now)
+
+        task_time = parse_time_string(task.run_time)
         if task.schedule_type == "once":
-            return current_time.time() >= task_time and task.last_run is None
+            return task_now.time() >= task_time and task.last_run is None
 
         if task.schedule_type == "daily":
-            time_matches = (
-                current_time.hour == task_time.hour
-                and current_time.minute == task_time.minute
-            )
+            time_matches = task_now.hour == task_time.hour and task_now.minute == task_time.minute
             return time_matches and task.last_run_date != current_date
 
         if task.schedule_type == "weekly":
-            weekday_matches = current_time.strftime("%a") in task.days
-            time_matches = (
-                current_time.hour == task_time.hour
-                and current_time.minute == task_time.minute
-            )
+            weekday_matches = task_now.strftime("%a") in task.days
+            time_matches = task_now.hour == task_time.hour and task_now.minute == task_time.minute
             return weekday_matches and time_matches and task.last_run_date != current_date
 
         return False
+
+    def _time_for_task(self, current_time: datetime, task: PurchaseTask) -> datetime:
+        """Return current time in the task timezone when configured."""
+        if not task.timezone:
+            return current_time
+        zone = ZoneInfo(task.timezone)
+        if current_time.tzinfo is None:
+            return current_time.replace(tzinfo=zone)
+        return current_time.astimezone(zone)
+
+    def _window_should_run(
+        self,
+        task: PurchaseTask,
+        raw_task: dict[str, Any],
+        task_now: datetime,
+    ) -> bool:
+        """Return True once per configured start/end window."""
+        start = parse_time_string(task.start_time)
+        end = parse_time_string(task.end_time)
+        current = task_now.time().replace(second=0, microsecond=0)
+        crosses_midnight = start > end
+
+        if crosses_midnight:
+            in_window = current >= start or current <= end
+            anchor_date = task_now.date() - timedelta(days=1) if current <= end else task_now.date()
+        else:
+            in_window = start <= current <= end
+            anchor_date = task_now.date()
+
+        if not in_window:
+            return False
+
+        if task.schedule_type == "weekly_window" and anchor_date.strftime("%a") not in task.days:
+            return False
+        if task.schedule_type == "once_window" and task.last_run is not None:
+            return False
+
+        last_window = raw_task.get("last_run_window") or task.last_run_window
+        if not last_window and task.last_run_date == anchor_date:
+            last_window = anchor_date.isoformat()
+        return last_window != anchor_date.isoformat()
+
+    def _window_key_for_task(self, task: PurchaseTask, current_time: datetime) -> str | None:
+        """Return YYYY-MM-DD key for the active schedule window, if any."""
+        if not is_window_schedule(task.schedule_type):
+            return None
+        task_now = self._time_for_task(current_time, task)
+        start = parse_time_string(task.start_time)
+        end = parse_time_string(task.end_time)
+        current = task_now.time().replace(second=0, microsecond=0)
+        if start > end and current <= end:
+            return (task_now.date() - timedelta(days=1)).isoformat()
+        return task_now.date().isoformat()
 
     async def execute_task(
         self,
@@ -173,7 +225,11 @@ class PurchaseScheduler:
 
         if result.success:
             logger.info("Purchase successful: %s", task.id)
-            raw_task["last_run"] = datetime.now().isoformat()
+            completed_at = datetime.now().astimezone()
+            raw_task["last_run"] = completed_at.isoformat()
+            window_key = self._window_key_for_task(task, completed_at)
+            if window_key:
+                raw_task["last_run_window"] = window_key
             self._update_monthly_spend(task.account_id, result)
         else:
             logger.error("Purchase failed: %s", result.error)
@@ -186,9 +242,9 @@ class PurchaseScheduler:
         Used by GitHub Actions so the workflow doesn't run forever.
         """
         config = self.load_config()
-        current_time = datetime.now()
+        current_time = datetime.now().astimezone()
 
-        logger.info("One-shot check at %s", current_time.strftime("%H:%M:%S"))
+        logger.info("One-shot check at %s", current_time.strftime("%H:%M:%S %Z"))
         await self._execute_due_tasks(config, current_time, dry_run=dry_run, mode=mode)
 
     async def run_scheduler(
@@ -209,9 +265,9 @@ class PurchaseScheduler:
         try:
             while True:
                 config = self.load_config()
-                current_time = datetime.now()
+                current_time = datetime.now().astimezone()
 
-                logger.info("Checking tasks at %s", current_time.strftime("%H:%M:%S"))
+                logger.info("Checking tasks at %s", current_time.strftime("%H:%M:%S %Z"))
                 await self._execute_due_tasks(config, current_time, dry_run=dry_run, mode=mode)
                 await asyncio.sleep(interval)
 

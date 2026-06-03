@@ -172,6 +172,13 @@ class SetupWizard:
             print(f"   Qty Per Purchase: {qty_display}")
             print(f"   Ship To: {addr_display}")
     
+    def _prompt_window(self) -> tuple[str, str, str | None]:
+        """Collect a schedule window from the user."""
+        start_time = input("Start time (e.g., 20:00 or 8:00 PM): ").strip()
+        end_time = input("End time (e.g., 22:00 or 10:00 PM): ").strip()
+        timezone = input("Timezone (optional, e.g., CST or America/Chicago): ").strip() or None
+        return start_time, end_time, timezone
+
     def add_purchase_task(self):
         """Add a new purchase task."""
         print("\n📝 ADD PURCHASE TASK")
@@ -190,21 +197,41 @@ class SetupWizard:
         product_url = input("Product URL: ").strip()
         
         print("\nSchedule Options:")
-        print("1. Run at specific time (e.g., 14:30)")
-        print("2. Run daily at specific time")
-        print("3. Run on specific days")
-        schedule_choice = input("Select (1-3): ").strip()
-        
+        print("1. Run once at/after a specific time")
+        print("2. Run daily at a specific time")
+        print("3. Run weekly on specific days/time")
+        print("4. Run once within a timeframe")
+        print("5. Run daily within a timeframe")
+        print("6. Run weekly within a timeframe")
+        schedule_choice = input("Select (1-6): ").strip()
+        days = ""
+        timezone = None
+        start_time = None
+        end_time = None
+
         if schedule_choice == "1":
-            run_time = input("Time (HH:MM in 24-hour format): ").strip()
+            run_time = input("Time (e.g., 14:30 or 2:30 PM): ").strip()
             schedule_type = "once"
         elif schedule_choice == "2":
-            run_time = input("Time (HH:MM): ").strip()
+            run_time = input("Time (e.g., 14:30 or 2:30 PM): ").strip()
             schedule_type = "daily"
         elif schedule_choice == "3":
-            run_time = input("Time (HH:MM): ").strip()
+            run_time = input("Time (e.g., 14:30 or 2:30 PM): ").strip()
             days = input("Days (e.g., 'Mon,Wed,Fri'): ").strip()
             schedule_type = "weekly"
+        elif schedule_choice == "4":
+            run_time = ""
+            start_time, end_time, timezone = self._prompt_window()
+            schedule_type = "once_window"
+        elif schedule_choice == "5":
+            run_time = ""
+            start_time, end_time, timezone = self._prompt_window()
+            schedule_type = "daily_window"
+        elif schedule_choice == "6":
+            run_time = ""
+            start_time, end_time, timezone = self._prompt_window()
+            days = input("Days (e.g., 'Mon,Wed,Fri'): ").strip()
+            schedule_type = "weekly_window"
         else:
             print("❌ Invalid choice")
             return
@@ -228,9 +255,14 @@ class SetupWizard:
             "last_run": None
         }
         
-        if schedule_choice == "3":
+        if schedule_choice in {"3", "6"}:
             task["days"] = days.split(",")
-        
+        if start_time and end_time:
+            task["start_time"] = start_time
+            task["end_time"] = end_time
+        if timezone:
+            task["timezone"] = timezone
+
         config["tasks"].append(task)
         self.save_config(config)
         print(f"✅ Purchase task '{task['id']}' added!")
@@ -251,7 +283,12 @@ class SetupWizard:
             print(f"\n📌 {task['id']}")
             print(f"   Account: {task['account_id']}")
             print(f"   Product: {task['product_url'][:50]}...")
-            print(f"   Schedule: {task['schedule_type']} @ {task['run_time']}")
+            if task.get("start_time") and task.get("end_time"):
+                tz = f" {task.get('timezone')}" if task.get("timezone") else ""
+                schedule = f"{task['schedule_type']} {task['start_time']}–{task['end_time']}{tz}"
+            else:
+                schedule = f"{task['schedule_type']} @ {task['run_time']}"
+            print(f"   Schedule: {schedule}")
             print(f"   Quantity: {task['quantity']}")
             print(f"   Status: {status}")
             print(f"   Last Run: {task['last_run'] or 'Never'}")

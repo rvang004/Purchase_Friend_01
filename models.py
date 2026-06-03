@@ -7,12 +7,81 @@ runtime dependency before the project truly needs it would be peak yak-shaving.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, time
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-VALID_SCHEDULE_TYPES = {"once", "daily", "weekly"}
+VALID_SCHEDULE_TYPES = {
+    "once",
+    "daily",
+    "weekly",
+    "once_window",
+    "daily_window",
+    "weekly_window",
+}
 VALID_WEEKDAYS = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+WINDOW_SCHEDULE_TYPES = {"once_window", "daily_window", "weekly_window"}
+TIMEZONE_ALIASES = {
+    "CT": "America/Chicago",
+    "CST": "America/Chicago",
+    "CDT": "America/Chicago",
+    "ET": "America/New_York",
+    "EST": "America/New_York",
+    "EDT": "America/New_York",
+    "MT": "America/Denver",
+    "MST": "America/Denver",
+    "MDT": "America/Denver",
+    "PT": "America/Los_Angeles",
+    "PST": "America/Los_Angeles",
+    "PDT": "America/Los_Angeles",
+}
+
+
+def is_window_schedule(schedule_type: str) -> bool:
+    """Return True when a schedule type uses a start/end time window."""
+    return schedule_type in WINDOW_SCHEDULE_TYPES
+
+
+def parse_time_string(value: Any, *, field_name: str = "time") -> time:
+    """Parse human-friendly time strings into a time value.
+
+    Supported examples: 20:00, 20:00:00, 8:00 PM, 8:00:00 PM.
+    Seconds are accepted for input friendliness, but scheduler checks are still
+    minute-oriented by default. Precision cosplay is how bugs get tiny hats.
+    """
+    if isinstance(value, time):
+        return value.replace(second=0, microsecond=0)
+    raw = str(value or "").strip().upper()
+    for fmt in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M:%S %p"):
+        try:
+            parsed = datetime.strptime(raw, fmt).time()
+            return parsed.replace(second=0, microsecond=0)
+        except ValueError:
+            continue
+    raise ValueError(f"{field_name} must be a time like HH:MM or 8:00 PM")
+
+
+def normalize_time_string(value: Any, *, field_name: str = "time") -> str:
+    """Normalize supported time strings to HH:MM."""
+    return parse_time_string(value, field_name=field_name).strftime("%H:%M")
+
+
+def normalize_timezone(value: Any) -> str | None:
+    """Normalize optional timezone names and common US aliases.
+
+    `CST` maps to America/Chicago because people usually mean Central Time,
+    not fixed UTC-6 all year. Time zones are hard because humans invented lunch.
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    normalized = TIMEZONE_ALIASES.get(raw.upper(), raw)
+    try:
+        ZoneInfo(normalized)
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError(f"invalid timezone: {raw!r}") from exc
+    return normalized
 
 
 def parse_money(value: Any, *, default: Decimal | None = None) -> Decimal:
@@ -154,12 +223,16 @@ class PurchaseTask:
     account_id: str
     product_url: str
     schedule_type: str
-    run_time: str
+    run_time: str = ""
     quantity: int = 1
     enabled: bool = True
     created: str | None = None
     last_run: str | None = None
     days: list[str] = field(default_factory=list)
+    start_time: str | None = None
+    end_time: str | None = None
+    timezone: str | None = None
+    last_run_window: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "PurchaseTask":
@@ -171,11 +244,25 @@ class PurchaseTask:
         if schedule_type not in VALID_SCHEDULE_TYPES:
             raise ValueError(f"task {task_id}: invalid schedule_type {schedule_type!r}")
 
-        run_time = str(data.get("run_time", "")).strip()
-        try:
-            datetime.strptime(run_time, "%H:%M")
-        except ValueError as exc:
-            raise ValueError(f"task {task_id}: run_time must be HH:MM") from exc
+        if is_window_schedule(schedule_type):
+            run_time = ""
+            start_time = normalize_time_string(
+                data.get("start_time"),
+                field_name=f"task {task_id}: start_time",
+            )
+            end_time = normalize_time_string(
+                data.get("end_time"),
+                field_name=f"task {task_id}: end_time",
+            )
+        else:
+            run_time = normalize_time_string(
+                data.get("run_time"),
+                field_name=f"task {task_id}: run_time",
+            )
+            start_time = None
+            end_time = None
+
+        timezone = normalize_timezone(data.get("timezone"))
 
         quantity = int(data.get("quantity", 1))
         if quantity < 1:
@@ -189,7 +276,7 @@ class PurchaseTask:
             raise ValueError(f"task {task_id}: product_url is required")
 
         days = [str(day).strip() for day in data.get("days", []) if str(day).strip()]
-        if schedule_type == "weekly":
+        if schedule_type in {"weekly", "weekly_window"}:
             invalid_days = [day for day in days if day not in VALID_WEEKDAYS]
             if not days:
                 raise ValueError(f"task {task_id}: weekly tasks require days")
@@ -198,6 +285,12 @@ class PurchaseTask:
 
         last_run = data.get("last_run")
         parse_optional_datetime(last_run)
+        last_run_window = data.get("last_run_window")
+        if last_run_window:
+            try:
+                datetime.strptime(str(last_run_window), "%Y-%m-%d")
+            except ValueError as exc:
+                raise ValueError(f"task {task_id}: last_run_window must be YYYY-MM-DD") from exc
 
         return cls(
             id=task_id,
@@ -210,6 +303,10 @@ class PurchaseTask:
             created=data.get("created"),
             last_run=last_run,
             days=days,
+            start_time=start_time,
+            end_time=end_time,
+            timezone=timezone,
+            last_run_window=last_run_window,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -226,6 +323,14 @@ class PurchaseTask:
         }
         if self.days:
             data["days"] = self.days
+        if self.start_time:
+            data["start_time"] = self.start_time
+        if self.end_time:
+            data["end_time"] = self.end_time
+        if self.timezone:
+            data["timezone"] = self.timezone
+        if self.last_run_window:
+            data["last_run_window"] = self.last_run_window
         return data
 
     @property
