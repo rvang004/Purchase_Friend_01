@@ -11,7 +11,8 @@ from models import Account, PurchaseResult, PurchaseTask
 from purchase_history import PurchaseHistory
 from purchase_policy import spend_amount, validate_purchase_result, validate_task_for_account
 from scheduler import PurchaseScheduler
-from purchase_adapters import FakeStoreAdapter, GenericStoreAdapter, select_adapter
+from purchase_adapters import FakeStoreAdapter, GenericStoreAdapter, WalmartStoreAdapter, select_adapter
+from purchase_adapters.walmart import parse_price_text
 from purchase_engine import PurchaseEngine
 
 
@@ -172,9 +173,22 @@ class AdapterSelectionTests(unittest.TestCase):
         adapter = select_adapter({"adapter": "fake_store"}, "https://example.test/product")
         self.assertIsInstance(adapter, FakeStoreAdapter)
 
+    def test_selects_walmart_by_account_metadata(self):
+        adapter = select_adapter({"adapter": "walmart"}, "https://example.test/product")
+        self.assertIsInstance(adapter, WalmartStoreAdapter)
+
+    def test_selects_walmart_by_url(self):
+        adapter = select_adapter({}, "https://www.walmart.com/ip/fake-product/123")
+        self.assertIsInstance(adapter, WalmartStoreAdapter)
+
     def test_selects_generic_for_normal_urls(self):
         adapter = select_adapter({}, "https://example.test/product")
         self.assertIsInstance(adapter, GenericStoreAdapter)
+
+    def test_walmart_price_parser_handles_common_formats(self):
+        self.assertEqual(parse_price_text("Now $19.99"), 19.99)
+        self.assertEqual(parse_price_text("$1,234.56"), 1234.56)
+        self.assertIsNone(parse_price_text("Price unavailable"))
 
 
 class EngineModeTests(unittest.TestCase):

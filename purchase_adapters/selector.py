@@ -8,9 +8,11 @@ from typing import Any
 from .base import StoreAdapter
 from .fake_store import FakeStoreAdapter
 from .generic import GenericStoreAdapter
+from .walmart import WalmartStoreAdapter
 
 
 FAKE_STORE_HOSTS = {"127.0.0.1", "localhost"}
+WALMART_HOST_SUFFIXES = ("walmart.com", "walmart.ca")
 
 
 def select_adapter(account: dict[str, Any], product_url: str) -> StoreAdapter:
@@ -22,9 +24,14 @@ def select_adapter(account: dict[str, Any], product_url: str) -> StoreAdapter:
     adapter_name = str(account.get("adapter", "")).strip().lower()
     if adapter_name == "fake_store":
         return FakeStoreAdapter()
+    if adapter_name == "walmart":
+        return WalmartStoreAdapter()
 
     parsed = urllib.parse.urlparse(product_url)
-    if parsed.hostname in FAKE_STORE_HOSTS:
+    host = parsed.hostname or ""
+    if host in FAKE_STORE_HOSTS:
         return FakeStoreAdapter()
+    if host.endswith(WALMART_HOST_SUFFIXES):
+        return WalmartStoreAdapter()
 
     return GenericStoreAdapter()
