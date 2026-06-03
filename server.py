@@ -12,6 +12,7 @@ import json
 import os
 import uuid
 import webbrowser
+from urllib.parse import urlencode
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -21,6 +22,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 import uvicorn
 
+from models import PurchaseTask, is_window_schedule
 from utils import CredentialManager
 
 app = FastAPI(title="Purchase Bot UI")
@@ -49,8 +51,18 @@ def save_accounts(accounts: dict):
     cred_manager.save_credentials(accounts)
 
 
-def redirect(tab: str = "accounts"):
-    return RedirectResponse(url=f"/?tab={tab}", status_code=303)
+def redirect(tab: str = "accounts", msg: str = ""):
+    query = urlencode({"tab": tab, "msg": msg})
+    return RedirectResponse(url=f"/?{query}", status_code=303)
+
+
+def parse_days(days: Optional[str]) -> list[str]:
+    return [day.strip() for day in (days or "").split(",") if day.strip()]
+
+
+def normalize_task(task: dict) -> dict:
+    """Validate and normalize task fields before persisting config."""
+    return PurchaseTask.from_dict(task).to_dict()
 
 
 # ── pages ─────────────────────────────────────────────────────────────────────
@@ -135,6 +147,9 @@ async def add_task(
     product_url:   str           = Form(...),
     schedule_type: str           = Form("daily"),
     run_time:      str           = Form("09:00"),
+    start_time:    str           = Form(""),
+    end_time:      str           = Form(""),
+    timezone:      str           = Form(""),
     days:          Optional[str] = Form(None),
     quantity:      int           = Form(1),
 ):
@@ -144,17 +159,27 @@ async def add_task(
         "account_id":    account_id,
         "product_url":   product_url,
         "schedule_type": schedule_type,
-        "run_time":      run_time,
+        "run_time":      "" if is_window_schedule(schedule_type) else run_time,
         "quantity":      quantity,
         "enabled":       True,
         "created":       datetime.now().isoformat(),
         "last_run":      None,
     }
-    if schedule_type == "weekly" and days:
-        task["days"] = [d.strip() for d in days.split(",") if d.strip()]
-    config["tasks"].append(task)
+    if schedule_type in {"weekly", "weekly_window"}:
+        task["days"] = parse_days(days)
+    if is_window_schedule(schedule_type):
+        task["start_time"] = start_time
+        task["end_time"] = end_time
+        if timezone.strip():
+            task["timezone"] = timezone.strip()
+        task["last_run_window"] = None
+
+    try:
+        config["tasks"].append(normalize_task(task))
+    except ValueError as exc:
+        return redirect("tasks", f"Invalid task: {exc}")
     save_config(config)
-    return redirect("tasks")
+    return redirect("tasks", "Task added")
 
 
 @app.post("/tasks/edit")
@@ -164,26 +189,45 @@ async def edit_task(
     product_url:   str           = Form(...),
     schedule_type: str           = Form("daily"),
     run_time:      str           = Form("09:00"),
+    start_time:    str           = Form(""),
+    end_time:      str           = Form(""),
+    timezone:      str           = Form(""),
     days:          Optional[str] = Form(None),
     quantity:      int           = Form(1),
 ):
     config = load_config()
-    for task in config["tasks"]:
+    for index, task in enumerate(config["tasks"]):
         if task["id"] == task_id:
-            task.update({
+            updated = {
+                **task,
                 "account_id":    account_id,
                 "product_url":   product_url,
                 "schedule_type": schedule_type,
-                "run_time":      run_time,
+                "run_time":      "" if is_window_schedule(schedule_type) else run_time,
                 "quantity":      quantity,
-            })
-            if schedule_type == "weekly" and days:
-                task["days"] = [d.strip() for d in days.split(",") if d.strip()]
-            else:
-                task.pop("days", None)
+            }
+            updated.pop("days", None)
+            updated.pop("start_time", None)
+            updated.pop("end_time", None)
+            updated.pop("timezone", None)
+            updated.pop("last_run_window", None)
+
+            if schedule_type in {"weekly", "weekly_window"}:
+                updated["days"] = parse_days(days)
+            if is_window_schedule(schedule_type):
+                updated["start_time"] = start_time
+                updated["end_time"] = end_time
+                if timezone.strip():
+                    updated["timezone"] = timezone.strip()
+                updated["last_run_window"] = task.get("last_run_window")
+
+            try:
+                config["tasks"][index] = normalize_task(updated)
+            except ValueError as exc:
+                return redirect("tasks", f"Invalid task: {exc}")
             break
     save_config(config)
-    return redirect("tasks")
+    return redirect("tasks", "Task updated")
 
 
 @app.post("/tasks/toggle")
