@@ -12,7 +12,7 @@ from typing import Any
 
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
-import purchase_actions as actions
+from purchase_adapters import StoreAdapter, select_adapter
 from purchase_artifacts import PurchaseArtifacts
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ class PurchaseEngine:
         dry_run: bool = False,
         mode: str | None = None,
         artifacts: PurchaseArtifacts | None = None,
+        adapter: StoreAdapter | None = None,
     ):
         self.headless = headless
         self.mode = self._resolve_mode(mode, dry_run)
@@ -39,6 +40,7 @@ class PurchaseEngine:
         self.context: BrowserContext | None = None
         self.page: Page | None = None
         self.artifacts = artifacts or PurchaseArtifacts()
+        self.adapter = adapter
         self.trace_path: str | None = None
 
     async def initialize(self) -> None:
@@ -79,43 +81,46 @@ class PurchaseEngine:
         }
 
         try:
+            self.adapter = self.adapter or select_adapter(account, product_url)
+            result["adapter"] = self.adapter.name
+
             if not await self._login(account, result):
                 return result
             if not await self._load_product(product_url, result):
                 return result
 
-            actual_quantity = await actions.set_quantity(self.page, quantity)
+            actual_quantity = await self.adapter.set_quantity(self.page, quantity)
             result["quantity"] = actual_quantity
             await self._screenshot("03_quantity", result)
 
-            item_price = await actions.get_item_price(self.page)
+            item_price = await self.adapter.get_item_price(self.page)
             result["item_price"] = item_price
             if self._price_blocked(account, item_price, result):
                 return result
 
-            if not await actions.add_to_cart(self.page, dry_run=self.dry_run):
+            if not await self.adapter.add_to_cart(self.page, dry_run=self.dry_run):
                 result["error"] = "Failed to add to cart"
                 return result
             await self._screenshot("04_cart_added", result)
 
-            if not await actions.navigate_to_cart(self.page):
+            if not await self.adapter.navigate_to_cart(self.page):
                 result["error"] = "Failed to reach cart page"
                 return result
             await self._screenshot("05_cart", result)
 
-            if not await actions.checkout(self.page, dry_run=self.dry_run):
+            if not await self.adapter.checkout(self.page, dry_run=self.dry_run):
                 result["error"] = "Checkout failed"
                 return result
             await self._screenshot("06_checkout", result)
 
-            await actions.select_shipping_address(
+            await self.adapter.select_shipping_address(
                 self.page,
                 account.get("shipping_address"),
                 dry_run=self.dry_run,
             )
             await self._screenshot("07_shipping", result)
 
-            if not await actions.complete_purchase(
+            if not await self.adapter.complete_purchase(
                 self.page,
                 dry_run=self.dry_run,
                 review_mode=self.review_mode,
@@ -123,6 +128,7 @@ class PurchaseEngine:
                 result["error"] = "Failed to complete purchase"
                 return result
             await self._screenshot("08_final", result)
+            result["final_url"] = self.page.url
 
             result["success"] = True
             if self.review_mode:
@@ -141,7 +147,7 @@ class PurchaseEngine:
         return result
 
     async def _login(self, account: dict[str, Any], result: dict[str, Any]) -> bool:
-        if await actions.login(self.page, account["site"], account["email"], account["password"]):
+        if await self.adapter.login(self.page, account):
             await self._screenshot("01_login", result)
             return True
         result["error"] = "Login failed"
@@ -149,7 +155,7 @@ class PurchaseEngine:
         return False
 
     async def _load_product(self, product_url: str, result: dict[str, Any]) -> bool:
-        if await actions.navigate_to_product(self.page, product_url):
+        if await self.adapter.navigate_to_product(self.page, product_url):
             await self._screenshot("02_product", result)
             return True
         result["error"] = "Failed to navigate to product"

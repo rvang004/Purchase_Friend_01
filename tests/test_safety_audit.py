@@ -11,6 +11,7 @@ from models import Account, PurchaseResult, PurchaseTask
 from purchase_history import PurchaseHistory
 from purchase_policy import spend_amount, validate_purchase_result, validate_task_for_account
 from scheduler import PurchaseScheduler
+from purchase_adapters import FakeStoreAdapter, GenericStoreAdapter, select_adapter
 from purchase_engine import PurchaseEngine
 
 
@@ -121,6 +122,8 @@ class PolicyTests(unittest.TestCase):
                 "artifact_dir": "runs/example",
                 "screenshots": ["runs/example/01.png"],
                 "trace_path": "runs/example/trace.zip",
+                "adapter": "fake_store",
+                "final_url": "http://127.0.0.1/checkout",
             },
             dry_run=True,
         )
@@ -129,6 +132,8 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(data["mode"], "review")
         self.assertTrue(data["review_required"])
         self.assertEqual(data["trace_path"], "runs/example/trace.zip")
+        self.assertEqual(data["adapter"], "fake_store")
+        self.assertIn("checkout", data["final_url"])
 
     def test_spend_amount_uses_order_total(self):
         task = PurchaseTask.from_dict(task_dict())
@@ -160,6 +165,16 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["event_type"], "policy_block")
         self.assertEqual(events[0]["error"], "Nope")
+
+
+class AdapterSelectionTests(unittest.TestCase):
+    def test_selects_fake_store_by_account_metadata(self):
+        adapter = select_adapter({"adapter": "fake_store"}, "https://example.test/product")
+        self.assertIsInstance(adapter, FakeStoreAdapter)
+
+    def test_selects_generic_for_normal_urls(self):
+        adapter = select_adapter({}, "https://example.test/product")
+        self.assertIsInstance(adapter, GenericStoreAdapter)
 
 
 class EngineModeTests(unittest.TestCase):

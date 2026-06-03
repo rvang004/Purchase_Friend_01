@@ -253,6 +253,8 @@ class PurchaseResult:
     artifact_dir: str | None = None
     screenshots: list[str] = field(default_factory=list)
     trace_path: str | None = None
+    adapter: str | None = None
+    final_url: str | None = None
 
     @classmethod
     def from_engine_result(
@@ -287,6 +289,8 @@ class PurchaseResult:
             artifact_dir=result.get("artifact_dir"),
             screenshots=list(result.get("screenshots", [])),
             trace_path=result.get("trace_path"),
+            adapter=result.get("adapter"),
+            final_url=result.get("final_url"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -306,4 +310,6 @@ class PurchaseResult:
             "artifact_dir": self.artifact_dir,
             "screenshots": self.screenshots,
             "trace_path": self.trace_path,
+            "adapter": self.adapter,
+            "final_url": self.final_url,
         }
