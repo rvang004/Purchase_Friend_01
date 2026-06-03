@@ -248,6 +248,11 @@ class PurchaseResult:
     quantity: int = 1
     order_total: Decimal | None = None
     dry_run: bool = False
+    mode: str | None = None
+    review_required: bool = False
+    artifact_dir: str | None = None
+    screenshots: list[str] = field(default_factory=list)
+    trace_path: str | None = None
 
     @classmethod
     def from_engine_result(
@@ -277,6 +282,11 @@ class PurchaseResult:
             quantity=quantity,
             order_total=parsed_total,
             dry_run=dry_run,
+            mode=result.get("mode"),
+            review_required=bool(result.get("review_required", False)),
+            artifact_dir=result.get("artifact_dir"),
+            screenshots=list(result.get("screenshots", [])),
+            trace_path=result.get("trace_path"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -291,4 +301,9 @@ class PurchaseResult:
             "quantity": self.quantity,
             "order_total": money_to_json(self.order_total),
             "dry_run": self.dry_run,
+            "mode": self.mode,
+            "review_required": self.review_required,
+            "artifact_dir": self.artifact_dir,
+            "screenshots": self.screenshots,
+            "trace_path": self.trace_path,
         }

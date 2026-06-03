@@ -105,8 +105,15 @@ class PurchaseScheduler:
 
         return False
 
-    async def execute_task(self, raw_task: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
+    async def execute_task(
+        self,
+        raw_task: dict[str, Any],
+        dry_run: bool = False,
+        mode: str | None = None,
+    ) -> dict[str, Any]:
         """Execute a single purchase task with validation, policy, and audit."""
+        run_mode = self._resolve_mode(mode, dry_run)
+        audit_dry_run = run_mode != "live"
         task = self.validate_task(raw_task)
         if task is None:
             return {"success": False, "error": "Invalid task"}
@@ -120,7 +127,7 @@ class PurchaseScheduler:
                 task_id=task.id,
                 account_id=task.account_id,
                 reason=decision.reason,
-                dry_run=dry_run,
+                dry_run=audit_dry_run,
             )
             return {"success": False, "error": decision.reason}
 
@@ -132,13 +139,14 @@ class PurchaseScheduler:
             engine_account,
             task.product_url,
             quantity=task.quantity,
-            dry_run=dry_run,
+            dry_run=run_mode == "dry-run",
+            mode=run_mode,
         )
         result = PurchaseResult.from_engine_result(
             task,
             task.account_id,
             raw_result,
-            dry_run=dry_run,
+            dry_run=audit_dry_run,
         )
 
         post_decision = validate_purchase_result(account, result)
@@ -148,7 +156,7 @@ class PurchaseScheduler:
                 task_id=task.id,
                 account_id=task.account_id,
                 reason=post_decision.reason,
-                dry_run=dry_run,
+                dry_run=audit_dry_run,
             )
             if result.success:
                 raw_result = {**raw_result, "success": False, "error": post_decision.reason}
@@ -156,7 +164,7 @@ class PurchaseScheduler:
                     task,
                     task.account_id,
                     raw_result,
-                    dry_run=dry_run,
+                    dry_run=audit_dry_run,
                 )
         else:
             logger.info("Purchase policy passed for task %s", task.id)
@@ -172,7 +180,7 @@ class PurchaseScheduler:
 
         return result.to_dict()
 
-    async def run_once(self, dry_run: bool = False) -> None:
+    async def run_once(self, dry_run: bool = False, mode: str | None = None) -> None:
         """
         Single check cycle — loads tasks, runs whatever is due, then exits.
         Used by GitHub Actions so the workflow doesn't run forever.
@@ -181,9 +189,14 @@ class PurchaseScheduler:
         current_time = datetime.now()
 
         logger.info("One-shot check at %s", current_time.strftime("%H:%M:%S"))
-        await self._execute_due_tasks(config, current_time, dry_run=dry_run)
+        await self._execute_due_tasks(config, current_time, dry_run=dry_run, mode=mode)
 
-    async def run_scheduler(self, interval: int = 60, dry_run: bool = False) -> None:
+    async def run_scheduler(
+        self,
+        interval: int = 60,
+        dry_run: bool = False,
+        mode: str | None = None,
+    ) -> None:
         """
         Main scheduler loop.
 
@@ -199,7 +212,7 @@ class PurchaseScheduler:
                 current_time = datetime.now()
 
                 logger.info("Checking tasks at %s", current_time.strftime("%H:%M:%S"))
-                await self._execute_due_tasks(config, current_time, dry_run=dry_run)
+                await self._execute_due_tasks(config, current_time, dry_run=dry_run, mode=mode)
                 await asyncio.sleep(interval)
 
         except KeyboardInterrupt:
@@ -214,7 +227,9 @@ class PurchaseScheduler:
         current_time: datetime,
         *,
         dry_run: bool,
+        mode: str | None = None,
     ) -> None:
+        run_mode = self._resolve_mode(mode, dry_run)
         tasks_to_run = [
             task for task in config.get("tasks", [])
             if self.check_if_should_run(task, current_time)
@@ -230,11 +245,17 @@ class PurchaseScheduler:
         # Accidentally overspending through concurrency? No thanks.
         results = []
         for task in tasks_to_run:
-            results.append(await self.execute_task(task, dry_run=dry_run))
+            results.append(await self.execute_task(task, dry_run=dry_run, mode=run_mode))
 
         self.save_config(config)
         success_count = sum(1 for result in results if result.get("success"))
         logger.info("Execution complete: %s/%s successful", success_count, len(results))
+
+    @staticmethod
+    def _resolve_mode(mode: str | None, dry_run: bool) -> str:
+        if dry_run:
+            return "dry-run"
+        return mode or "live"
 
     def _load_account(self, account_id: str, account_data: dict[str, Any] | None) -> Account | None:
         if account_data is None:
@@ -268,12 +289,13 @@ class PurchaseScheduler:
 async def main() -> None:
     """CLI entry point for scheduler."""
     parser = argparse.ArgumentParser(description="Purchase Bot Scheduler")
-    parser.add_argument("--dry-run", action="store_true", help="Simulate purchases without completing")
+    parser.add_argument("--dry-run", action="store_true", help="Alias for --mode dry-run")
+    parser.add_argument("--mode", choices=["dry-run", "review", "live"], default="review")
     parser.add_argument("--interval", type=int, default=60, help="Check interval in seconds")
     args = parser.parse_args()
 
     scheduler = PurchaseScheduler()
-    await scheduler.run_scheduler(interval=args.interval, dry_run=args.dry_run)
+    await scheduler.run_scheduler(interval=args.interval, dry_run=args.dry_run, mode=args.mode)
 
 
 if __name__ == "__main__":

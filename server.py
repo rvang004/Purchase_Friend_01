@@ -157,6 +157,46 @@ async def add_task(
     return redirect("tasks")
 
 
+@app.post("/tasks/edit")
+async def edit_task(
+    task_id:       str           = Form(...),
+    account_id:    str           = Form(...),
+    product_url:   str           = Form(...),
+    schedule_type: str           = Form("daily"),
+    run_time:      str           = Form("09:00"),
+    days:          Optional[str] = Form(None),
+    quantity:      int           = Form(1),
+):
+    config = load_config()
+    for task in config["tasks"]:
+        if task["id"] == task_id:
+            task.update({
+                "account_id":    account_id,
+                "product_url":   product_url,
+                "schedule_type": schedule_type,
+                "run_time":      run_time,
+                "quantity":      quantity,
+            })
+            if schedule_type == "weekly" and days:
+                task["days"] = [d.strip() for d in days.split(",") if d.strip()]
+            else:
+                task.pop("days", None)
+            break
+    save_config(config)
+    return redirect("tasks")
+
+
+@app.post("/tasks/toggle")
+async def toggle_task(task_id: str = Form(...)):
+    config = load_config()
+    for task in config["tasks"]:
+        if task["id"] == task_id:
+            task["enabled"] = not task.get("enabled", True)
+            break
+    save_config(config)
+    return redirect("tasks")
+
+
 @app.post("/tasks/delete")
 async def delete_task(task_id: str = Form(...)):
     config = load_config()
@@ -169,4 +209,4 @@ async def delete_task(task_id: str = Form(...)):
 
 if __name__ == "__main__":
     webbrowser.open("http://localhost:8100")
-    uvicorn.run("server:app", host="0.0.0.0", port=8100, reload=True)
+    uvicorn.run("server:app", host="127.0.0.1", port=8100, reload=False)

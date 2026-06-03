@@ -11,6 +11,7 @@ from models import Account, PurchaseResult, PurchaseTask
 from purchase_history import PurchaseHistory
 from purchase_policy import spend_amount, validate_purchase_result, validate_task_for_account
 from scheduler import PurchaseScheduler
+from purchase_engine import PurchaseEngine
 
 
 class DummyCredentialManager:
@@ -105,6 +106,30 @@ class PolicyTests(unittest.TestCase):
         self.assertFalse(decision.allowed)
         self.assertEqual(decision.reason, "Price could not be verified")
 
+    def test_result_preserves_audit_artifacts(self):
+        task = PurchaseTask.from_dict(task_dict())
+        result = PurchaseResult.from_engine_result(
+            task,
+            "acct_1",
+            {
+                "success": True,
+                "product_url": task.product_url,
+                "timestamp": "2026-06-03T09:00:00",
+                "item_price": 20,
+                "mode": "review",
+                "review_required": True,
+                "artifact_dir": "runs/example",
+                "screenshots": ["runs/example/01.png"],
+                "trace_path": "runs/example/trace.zip",
+            },
+            dry_run=True,
+        )
+
+        data = result.to_dict()
+        self.assertEqual(data["mode"], "review")
+        self.assertTrue(data["review_required"])
+        self.assertEqual(data["trace_path"], "runs/example/trace.zip")
+
     def test_spend_amount_uses_order_total(self):
         task = PurchaseTask.from_dict(task_dict())
         result = PurchaseResult.from_engine_result(
@@ -135,6 +160,18 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["event_type"], "policy_block")
         self.assertEqual(events[0]["error"], "Nope")
+
+
+class EngineModeTests(unittest.TestCase):
+    def test_engine_resolves_dry_run_alias(self):
+        engine = PurchaseEngine(dry_run=True)
+        self.assertEqual(engine.mode, "dry-run")
+        self.assertTrue(engine.dry_run)
+
+    def test_engine_resolves_review_mode(self):
+        engine = PurchaseEngine(mode="review")
+        self.assertEqual(engine.mode, "review")
+        self.assertTrue(engine.review_mode)
 
 
 class SchedulerTests(unittest.TestCase):
@@ -175,7 +212,7 @@ class SchedulerTests(unittest.TestCase):
                 history=history,
             )
 
-            async def fake_run_purchase(account, product_url, quantity=1, dry_run=False):
+            async def fake_run_purchase(account, product_url, quantity=1, dry_run=False, mode=None):
                 return {
                     "success": True,
                     "account_id": account["id"],
@@ -210,7 +247,7 @@ class SchedulerTests(unittest.TestCase):
                 history=history,
             )
 
-            async def fake_run_purchase(account, product_url, quantity=1, dry_run=False):
+            async def fake_run_purchase(account, product_url, quantity=1, dry_run=False, mode=None):
                 return {
                     "success": True,
                     "product_url": product_url,
