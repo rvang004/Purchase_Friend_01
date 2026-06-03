@@ -37,9 +37,10 @@ env/
 *.swp
 *.swo
 
-# Logs
+# Logs & local audit data
 logs/
 *.log
+purchase_history.jsonl
 
 # Config (keep template, ignore filled)
 config.json
