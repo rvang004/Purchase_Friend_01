@@ -69,8 +69,7 @@ def normalize_task(task: dict) -> dict:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, tab: str = "accounts", msg: str = ""):
-    return templates.TemplateResponse("ui.html", {
-        "request":  request,
+    return templates.TemplateResponse(request, "ui.html", {
         "accounts": load_accounts(),
         "tasks":    load_config()["tasks"],
         "tab":      tab,
