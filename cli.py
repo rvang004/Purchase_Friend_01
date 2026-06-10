@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from utils import CredentialManager
 from datetime import datetime
+from app_paths import CONFIG_FILE, ensure_parent
 
 
 class SetupWizard:
@@ -14,7 +15,7 @@ class SetupWizard:
     def __init__(self):
         self.cred_manager = CredentialManager()
         self.accounts = self.cred_manager.load_credentials()
-        self.config_file = "config.json"
+        self.config_file = CONFIG_FILE
     
     def load_config(self) -> dict:
         """Load purchase tasks config."""

@@ -7,13 +7,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app_paths import RUNS_DIR
+
 
 class PurchaseArtifacts:
     """Captures screenshots and Playwright traces for a purchase run."""
 
-    def __init__(self, base_dir: str = "runs", run_id: str | None = None):
+    def __init__(self, base_dir: str | Path = RUNS_DIR, run_id: str | None = None):
+        base_path = Path(base_dir)
         safe_run_id = run_id or datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        self.run_dir = Path(base_dir) / self._safe_name(safe_run_id)
+        self.run_dir = base_path / self._safe_name(safe_run_id)
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self._trace_started = False
 

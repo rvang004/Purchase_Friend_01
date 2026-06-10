@@ -4,29 +4,31 @@ Uses Fernet (symmetric encryption) from cryptography library.
 """
 
 import json
-import os
 from pathlib import Path
 from cryptography.fernet import Fernet
 from getpass import getpass
+
+from app_paths import CREDENTIALS_FILE, MASTER_KEY_FILE, ensure_parent
 
 
 class CredentialManager:
     """Handles secure encryption/decryption of account credentials."""
     
-    def __init__(self, cred_file: str = "credentials.enc", key_file: str = ".master_key"):
-        self.cred_file = cred_file
-        self.key_file = key_file
+    def __init__(self, cred_file: str | Path = CREDENTIALS_FILE, key_file: str | Path = MASTER_KEY_FILE):
+        self.cred_file = Path(cred_file)
+        self.key_file = Path(key_file)
         self.cipher = None
         self._load_or_create_key()
     
     def _load_or_create_key(self):
         """Load existing key or create new one."""
-        if os.path.exists(self.key_file):
-            with open(self.key_file, "rb") as f:
+        if self.key_file.exists():
+            with self.key_file.open("rb") as f:
                 key = f.read()
         else:
+            ensure_parent(self.key_file)
             key = Fernet.generate_key()
-            with open(self.key_file, "wb") as f:
+            with self.key_file.open("wb") as f:
                 f.write(key)
             print(f"✅ Master key created: {self.key_file}")
             print("⚠️  KEEP THIS FILE SAFE! Add to .gitignore (already done).\n")
@@ -39,7 +41,8 @@ class CredentialManager:
             json_data = json.dumps(accounts, indent=2)
             encrypted = self.cipher.encrypt(json_data.encode())
             
-            with open(self.cred_file, "wb") as f:
+            ensure_parent(self.cred_file)
+            with self.cred_file.open("wb") as f:
                 f.write(encrypted)
             
             return True
@@ -49,11 +52,11 @@ class CredentialManager:
     
     def load_credentials(self) -> dict:
         """Decrypt and load accounts from file."""
-        if not os.path.exists(self.cred_file):
+        if not self.cred_file.exists():
             return {}
         
         try:
-            with open(self.cred_file, "rb") as f:
+            with self.cred_file.open("rb") as f:
                 encrypted = f.read()
             
             decrypted = self.cipher.decrypt(encrypted).decode()

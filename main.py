@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from cli import SetupWizard
 from scheduler import PurchaseScheduler
+from app_paths import CONFIG_FILE
 
 
 def main():
@@ -76,8 +77,8 @@ Examples:
         scheduler = PurchaseScheduler()
         
         # Check if config exists
-        if not Path("config.json").exists():
-            print("❌ No configuration found!")
+        if not CONFIG_FILE.exists():
+            print("No configuration found!")
             print("   Run: python main.py setup")
             sys.exit(1)
         

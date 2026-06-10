@@ -1,0 +1,51 @@
+name: Purchase Bot Scheduled Run
+
+on:
+  # Run every day at 9:00 AM UTC
+  schedule:
+    - cron: '0 9 * * *'
+  # Also allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  purchase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          playwright install
+      
+      - name: Restore credentials
+        run: |
+          mkdir -p .github_secrets
+          echo "${{ secrets.MASTER_KEY }}" | base64 -d > .master_key
+          echo "${{ secrets.CREDENTIALS_ENC }}" | base64 -d > credentials.enc
+          echo "${{ secrets.CONFIG_JSON }}" | base64 -d > config.json
+      
+      - name: Run purchase scheduler (one cycle)
+        run: python main.py run --once --mode live
+      
+      - name: Upload run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: purchase-bot-run
+          path: runs/
+          retention-days: 7
+      
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: purchase-bot-logs
+          path: purchase_bot.log
+          retention-days: 30

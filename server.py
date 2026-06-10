@@ -24,11 +24,12 @@ import uvicorn
 
 from models import PurchaseTask, is_window_schedule
 from utils import CredentialManager
+from app_paths import CONFIG_FILE, ensure_parent
 
 app = FastAPI(title="Purchase Bot UI")
 templates = Jinja2Templates(directory="templates")
 cred_manager = CredentialManager()
-CONFIG_FILE = Path("config.json")
+CONFIG_FILE = CONFIG_FILE
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────

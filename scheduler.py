@@ -18,12 +18,14 @@ from purchase_engine import run_purchase
 from purchase_history import PurchaseHistory
 from purchase_policy import spend_amount, validate_purchase_result, validate_task_for_account
 from utils import CredentialManager
+from app_paths import CONFIG_FILE, HISTORY_FILE, LOG_FILE, ensure_parent
 
+ensure_parent(LOG_FILE)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("purchase_bot.log"),
+        logging.FileHandler(str(LOG_FILE)),
         logging.StreamHandler(),
     ],
 )
@@ -35,18 +37,18 @@ class PurchaseScheduler:
 
     def __init__(
         self,
-        config_file: str = "config.json",
-        cred_file: str = "credentials.enc",
-        history_file: str = "purchase_history.jsonl",
+        config_file: str | Path = CONFIG_FILE,
+        cred_file: str | Path = None,
+        history_file: str | Path = HISTORY_FILE,
         *,
         cred_manager: CredentialManager | None = None,
         accounts: dict[str, dict[str, Any]] | None = None,
         history: PurchaseHistory | None = None,
     ):
-        self.config_file = config_file
+        self.config_file = Path(config_file)
         self.cred_manager = cred_manager or CredentialManager(cred_file=cred_file)
         self.accounts = accounts if accounts is not None else self.cred_manager.load_credentials()
-        self.history = history or PurchaseHistory(history_file)
+        self.history = history or PurchaseHistory(str(history_file))
 
     def load_config(self) -> dict[str, Any]:
         """Load purchase tasks config."""
