@@ -11,6 +11,7 @@ Then open: http://localhost:8100
 import json
 import os
 import uuid
+import base64
 import webbrowser
 from urllib.parse import urlencode
 from datetime import datetime
@@ -35,6 +36,17 @@ CONFIG_FILE = CONFIG_FILE
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def load_config() -> dict:
+    # Try environment variable first (for Railway/cloud deployment)
+    env_config = os.environ.get('CONFIG_JSON')
+    if env_config:
+        try:
+            config_bytes = base64.b64decode(env_config)
+            return json.loads(config_bytes.decode())
+        except Exception as e:
+            print(f"[ERROR] Failed to load CONFIG_JSON from env: {e}")
+            return {"tasks": []}
+    
+    # Fall back to file-based (for local development)
     if CONFIG_FILE.exists():
         return json.loads(CONFIG_FILE.read_text())
     return {"tasks": []}
@@ -252,5 +264,12 @@ async def delete_task(task_id: str = Form(...)):
 # ── run ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    webbrowser.open("http://localhost:8100")
-    uvicorn.run("server:app", host="127.0.0.1", port=8100, reload=False)
+    # Only open browser locally, not on cloud deployment
+    is_railway = os.environ.get("RAILWAY_ENVIRONMENT") is not None
+    if not is_railway:
+        webbrowser.open("http://localhost:8100")
+    
+    # On Railway, bind to 0.0.0.0; locally, bind to 127.0.0.1
+    host = "0.0.0.0" if is_railway else "127.0.0.1"
+    port = int(os.environ.get("PORT", 8100))
+    uvicorn.run("server:app", host=host, port=port, reload=False)
