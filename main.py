@@ -62,6 +62,24 @@ Examples:
         default=60,
         help="Check interval in seconds (default: 60)"
     )
+    run_parser.add_argument(
+        "--headless",
+        action="store_true",
+        default=True,
+        help="Run browser in headless mode (default: True for speed, use --no-headless to see window)"
+    )
+    run_parser.add_argument(
+        "--no-headless",
+        action="store_false",
+        dest="headless",
+        help="Show browser window (useful for debugging Walmart anti-bot detection)"
+    )
+    run_parser.add_argument(
+        "--proxy",
+        type=str,
+        default=None,
+        help="HTTP proxy URL to avoid IP rate-limiting (e.g., http://proxy.example.com:8080)"
+    )
     
     args = parser.parse_args()
     
@@ -82,18 +100,25 @@ Examples:
             print("   Run: python main.py setup")
             sys.exit(1)
         
-        # Run scheduler
+        # Run scheduler with anti-bot flags
         try:
             if args.once:
-                asyncio.run(scheduler.run_once(dry_run=args.dry_run, mode=args.mode))
+                asyncio.run(scheduler.run_once(
+                    dry_run=args.dry_run,
+                    mode=args.mode,
+                    headless=args.headless,
+                    proxy=args.proxy,
+                ))
             else:
                 asyncio.run(scheduler.run_scheduler(
                     interval=args.interval,
                     dry_run=args.dry_run,
-                    mode=args.mode
+                    mode=args.mode,
+                    headless=args.headless,
+                    proxy=args.proxy,
                 ))
         except KeyboardInterrupt:
-            print("\n👋 Shutting down...")
+            print("\n Shutting down...")
             sys.exit(0)
 
 

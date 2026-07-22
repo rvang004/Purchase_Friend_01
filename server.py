@@ -98,6 +98,7 @@ async def add_account(
     site:                str           = Form(...),
     email:               str           = Form(...),
     password:            str           = Form(...),
+    adapter:             str           = Form(""),
     payment_method:      str           = Form("credit_card"),
     monthly_limit:       float         = Form(1000.0),
     price_limit_per_item: float        = Form(500.0),
@@ -129,6 +130,11 @@ async def add_account(
         quantity_limit_per_item=qty,
         shipping_address=addr,
     )
+    
+    # Add adapter if specified
+    if adapter.strip() and adapter.strip() != "":
+        accounts[account_id]["adapter"] = adapter.strip()
+    
     save_accounts(accounts)
     return redirect("accounts")
 
@@ -165,7 +171,9 @@ async def add_task(
     days:          Optional[str] = Form(None),
     quantity:      int           = Form(1),
 ):
+    print(f"[DEBUG] add_task called with account_id={account_id}, product_url={product_url}")
     config = load_config()
+    print(f"[DEBUG] loaded config: {config}")
     task = {
         "id":            f"task_{uuid.uuid4().hex[:8]}",
         "account_id":    account_id,
@@ -188,9 +196,12 @@ async def add_task(
 
     try:
         config["tasks"].append(normalize_task(task))
+        print(f"[DEBUG] task normalized and added: {task['id']}")
     except ValueError as exc:
+        print(f"[ERROR] normalize_task failed: {exc}")
         return redirect("tasks", f"Invalid task: {exc}")
     save_config(config)
+    print(f"[DEBUG] config saved, now has {len(config['tasks'])} tasks")
     return redirect("tasks", "Task added")
 
 

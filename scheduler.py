@@ -18,6 +18,7 @@ from purchase_engine import run_purchase
 from purchase_history import PurchaseHistory
 from purchase_policy import spend_amount, validate_purchase_result, validate_task_for_account
 from utils import CredentialManager
+from app_paths import CONFIG_FILE, CREDENTIALS_FILE, HISTORY_FILE
 from app_paths import CONFIG_FILE, HISTORY_FILE, LOG_FILE, ensure_parent
 
 ensure_parent(LOG_FILE)
@@ -38,7 +39,7 @@ class PurchaseScheduler:
     def __init__(
         self,
         config_file: str | Path = CONFIG_FILE,
-        cred_file: str | Path = None,
+        cred_file: str | Path = CREDENTIALS_FILE,
         history_file: str | Path = HISTORY_FILE,
         *,
         cred_manager: CredentialManager | None = None,
@@ -164,6 +165,8 @@ class PurchaseScheduler:
         raw_task: dict[str, Any],
         dry_run: bool = False,
         mode: str | None = None,
+        headless: bool = True,
+        proxy: str | None = None,
     ) -> dict[str, Any]:
         """Execute a single purchase task with validation, policy, and audit."""
         run_mode = self._resolve_mode(mode, dry_run)
@@ -195,6 +198,8 @@ class PurchaseScheduler:
             quantity=task.quantity,
             dry_run=run_mode == "dry-run",
             mode=run_mode,
+            headless=headless,
+            proxy=proxy,
         )
         result = PurchaseResult.from_engine_result(
             task,
@@ -238,22 +243,24 @@ class PurchaseScheduler:
 
         return result.to_dict()
 
-    async def run_once(self, dry_run: bool = False, mode: str | None = None) -> None:
+    async def run_once(self, dry_run: bool = False, mode: str | None = None, headless: bool = True, proxy: str | None = None) -> None:
         """
-        Single check cycle — loads tasks, runs whatever is due, then exits.
+        Single check cycle  loads tasks, runs whatever is due, then exits.
         Used by GitHub Actions so the workflow doesn't run forever.
         """
         config = self.load_config()
         current_time = datetime.now().astimezone()
 
         logger.info("One-shot check at %s", current_time.strftime("%H:%M:%S %Z"))
-        await self._execute_due_tasks(config, current_time, dry_run=dry_run, mode=mode)
+        await self._execute_due_tasks(config, current_time, dry_run=dry_run, mode=mode, headless=headless, proxy=proxy)
 
     async def run_scheduler(
         self,
         interval: int = 60,
         dry_run: bool = False,
         mode: str | None = None,
+        headless: bool = True,
+        proxy: str | None = None,
     ) -> None:
         """
         Main scheduler loop.
@@ -261,8 +268,10 @@ class PurchaseScheduler:
         Args:
             interval: Check interval in seconds
             dry_run: If True, simulate purchases without completing them
+            headless: Run browser in headless mode
+            proxy: HTTP proxy URL for IP rotation
         """
-        logger.info("Purchase scheduler started")
+        logger.info("Purchase scheduler started (headless=%s, proxy=%s)", headless, bool(proxy))
 
         try:
             while True:
@@ -270,12 +279,13 @@ class PurchaseScheduler:
                 current_time = datetime.now().astimezone()
 
                 logger.info("Checking tasks at %s", current_time.strftime("%H:%M:%S %Z"))
-                await self._execute_due_tasks(config, current_time, dry_run=dry_run, mode=mode)
+                await self._execute_due_tasks(config, current_time, dry_run=dry_run, mode=mode, headless=headless, proxy=proxy)
                 await asyncio.sleep(interval)
 
         except KeyboardInterrupt:
             logger.info("Scheduler stopped by user")
         except Exception as exc:
+            logger.error("Scheduler error: %s", exc)
             logger.error("Scheduler error: %s", exc)
             raise
 

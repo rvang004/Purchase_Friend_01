@@ -30,6 +30,7 @@ class PurchaseEngine:
         mode: str | None = None,
         artifacts: PurchaseArtifacts | None = None,
         adapter: StoreAdapter | None = None,
+        proxy: str | None = None,
     ):
         self.headless = headless
         self.mode = self._resolve_mode(mode, dry_run)
@@ -42,15 +43,32 @@ class PurchaseEngine:
         self.artifacts = artifacts or PurchaseArtifacts()
         self.adapter = adapter
         self.trace_path: str | None = None
+        self.proxy = proxy
 
     async def initialize(self) -> None:
         """Start browser instance and trace capture."""
         self.playwright = await async_playwright().start()
-        self.browser = await self.playwright.chromium.launch(headless=self.headless)
-        self.context = await self.browser.new_context()
+        
+        # Launch browser with proxy support
+        launch_args = {"headless": self.headless}
+        if self.proxy:
+            launch_args["proxy"] = {"server": self.proxy}
+            logger.info("Launching browser with proxy: %s", self.proxy)
+        
+        self.browser = await self.playwright.chromium.launch(**launch_args)
+        
+        # Create context with realistic fingerprinting
+        context_args = {
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "viewport": {"width": 1366, "height": 768},
+            "locale": "en-US",
+            "timezone_id": "America/Chicago",
+        }
+        self.context = await self.browser.new_context(**context_args)
         await self.artifacts.start_trace(self.context)
         self.page = await self.context.new_page()
-        logger.info("Browser initialized in %s mode", self.mode)
+        logger.info("Browser initialized in %s mode (headless=%s, proxy=%s)", self.mode, self.headless, bool(self.proxy))
 
     async def close(self) -> None:
         """Close browser and persist trace if available."""
@@ -200,14 +218,17 @@ async def run_purchase(
     quantity: int = 1,
     dry_run: bool = False,
     mode: str | None = None,
+    headless: bool = True,
+    proxy: str | None = None,
 ) -> dict[str, Any]:
     """Standalone function to execute a single purchase."""
     run_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{account.get('id', 'account')}"
     engine = PurchaseEngine(
-        headless=True,
+        headless=headless,
         dry_run=dry_run,
         mode=mode,
         artifacts=PurchaseArtifacts(run_id=run_id),
+        proxy=proxy,
     )
 
     result: dict[str, Any] | None = None

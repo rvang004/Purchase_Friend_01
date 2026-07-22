@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 async def login(page: Any, site_url: str, email: str, password: str) -> bool:
     try:
-        await page.goto(site_url, wait_until="networkidle")
+        # Use domcontentloaded instead of networkidle + 60s timeout
+        await page.goto(site_url, wait_until="domcontentloaded", timeout=60000)
         logger.info("Navigated to %s", site_url)
 
         email_input = await page.query_selector('input[type="email"], input[name*="email" i]')
@@ -36,7 +37,10 @@ async def login(page: Any, site_url: str, email: str, password: str) -> bool:
         submit_btn = await page.query_selector('button[type="submit"]')
         if submit_btn:
             await submit_btn.click()
-            await page.wait_for_load_state("networkidle")
+            try:
+                await page.wait_for_load_state("load", timeout=60000)
+            except Exception as exc:
+                logger.warning("Load state timeout during login: %s", exc)
             logger.info("Login submitted")
             return True
 
@@ -48,7 +52,8 @@ async def login(page: Any, site_url: str, email: str, password: str) -> bool:
 
 async def navigate_to_product(page: Any, product_url: str) -> bool:
     try:
-        await page.goto(product_url, wait_until="networkidle")
+        # Use domcontentloaded instead of networkidle + 60s timeout
+        await page.goto(product_url, wait_until="domcontentloaded", timeout=60000)
         logger.info("Product page loaded: %s", product_url)
         return True
     except Exception as exc:
@@ -195,7 +200,10 @@ async def navigate_to_cart(page: Any) -> bool:
             link = await page.query_selector(selector)
             if link:
                 await link.click()
-                await page.wait_for_load_state("networkidle")
+                try:
+                    await page.wait_for_load_state("load", timeout=60000)
+                except Exception as exc:
+                    logger.warning("Load state timeout navigating to cart: %s", exc)
                 logger.info("Navigated to cart via mini-cart link")
                 return True
 
@@ -203,7 +211,11 @@ async def navigate_to_cart(page: Any) -> bool:
         base = f"{parsed.scheme}://{parsed.netloc}"
         for path in ["/cart", "/basket", "/bag", "/checkout/cart"]:
             try:
-                response = await page.goto(base + path, wait_until="networkidle")
+                response = await page.goto(
+                    base + path,
+                    wait_until="domcontentloaded",
+                    timeout=60000,
+                )
                 if response and response.ok:
                     logger.info("Navigated to cart via %s", base + path)
                     return True
@@ -292,7 +304,10 @@ async def checkout(page: Any, *, dry_run: bool = False) -> bool:
                     logger.info("DRY RUN: Would proceed to checkout")
                     return True
                 await button.click()
-                await page.wait_for_load_state("networkidle")
+                try:
+                    await page.wait_for_load_state("load", timeout=60000)
+                except Exception as exc:
+                    logger.warning("Load state timeout during checkout: %s", exc)
                 logger.info("Proceeded to checkout")
                 return True
 
