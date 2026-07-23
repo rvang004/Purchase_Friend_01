@@ -23,7 +23,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 import uvicorn
 
-from models import PurchaseTask, is_window_schedule
+from models import PurchaseTask, is_window_schedule, Account
 from utils import CredentialManager
 from app_paths import CONFIG_FILE, ensure_parent
 
@@ -82,9 +82,20 @@ def normalize_task(task: dict) -> dict:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, tab: str = "accounts", msg: str = ""):
+    config = load_config()
+    # Validate and skip malformed tasks to prevent rendering errors
+    valid_tasks = []
+    for task in config.get("tasks", []):
+        try:
+            # Validate by converting to PurchaseTask and back to dict
+            validated = normalize_task(task)
+            valid_tasks.append(validated)
+        except ValueError as exc:
+            print(f"[WARNING] Skipping invalid task {task.get('id', '?')}: {exc}")
+    
     return templates.TemplateResponse(request, "ui.html", {
         "accounts": load_accounts(),
-        "tasks":    load_config()["tasks"],
+        "tasks":    valid_tasks,
         "tab":      tab,
         "msg":      msg,
     })
