@@ -296,6 +296,8 @@ class PurchaseScheduler:
         *,
         dry_run: bool,
         mode: str | None = None,
+        headless: bool = True,
+        proxy: str | None = None,
     ) -> None:
         run_mode = self._resolve_mode(mode, dry_run)
         tasks_to_run = [
@@ -313,7 +315,7 @@ class PurchaseScheduler:
         # Accidentally overspending through concurrency? No thanks.
         results = []
         for task in tasks_to_run:
-            results.append(await self.execute_task(task, dry_run=dry_run, mode=run_mode))
+            results.append(await self.execute_task(task, dry_run=dry_run, mode=run_mode, headless=headless, proxy=proxy))
 
         self.save_config(config)
         success_count = sum(1 for result in results if result.get("success"))

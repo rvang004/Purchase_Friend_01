@@ -1,2 +1,9 @@
 2026-07-01 17:21:33,932 - INFO - One-shot check at 17:21:33 Central Daylight Time
 2026-07-01 17:21:33,933 - INFO - No tasks due right now
+2026-07-22 19:29:27,785 - INFO - One-shot check at 19:29:27 Central Daylight Time
+2026-07-22 19:29:27,786 - INFO - No tasks due right now
+2026-07-22 19:29:42,493 - INFO - One-shot check at 19:29:42 Central Daylight Time
+2026-07-22 19:29:42,507 - INFO - Found 1 task(s) to execute
+2026-07-22 19:29:42,507 - ERROR - Account 'test_account' not found
+2026-07-22 19:29:42,507 - WARNING - Task task_test1 blocked: Account not found
+2026-07-22 19:29:42,511 - INFO - Execution complete: 0/1 successful
