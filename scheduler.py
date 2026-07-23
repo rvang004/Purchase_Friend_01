@@ -176,6 +176,11 @@ class PurchaseScheduler:
             return {"success": False, "error": "Invalid task"}
 
         account_data = self.accounts.get(task.account_id)
+        
+        # Auto-create account if missing and task has account_config
+        if account_data is None and "account_config" in raw_task:
+            account_data = self._auto_create_account(task.account_id, raw_task["account_config"])
+        
         account = self._load_account(task.account_id, account_data)
         decision = validate_task_for_account(task, account)
         if not decision.allowed:
@@ -299,6 +304,10 @@ class PurchaseScheduler:
         headless: bool = True,
         proxy: str | None = None,
     ) -> None:
+        # IMPORTANT: Reload accounts from disk every cycle so new accounts added via web UI are visible
+        self.accounts = self.cred_manager.load_credentials()
+        logger.debug("Reloaded accounts from disk: %s", list(self.accounts.keys()))
+        
         run_mode = self._resolve_mode(mode, dry_run)
         tasks_to_run = [
             task for task in config.get("tasks", [])
@@ -327,9 +336,50 @@ class PurchaseScheduler:
             return "dry-run"
         return mode or "live"
 
+    def _auto_create_account(self, account_id: str, account_config: dict[str, Any]) -> dict[str, Any] | None:
+        """Auto-create an account from config if it doesn't exist."""
+        if not account_config.get("site") or not account_config.get("email"):
+            logger.error(
+                "Cannot auto-create account '%s': missing 'site' or 'email' in account_config",
+                account_id
+            )
+            return None
+        
+        try:
+            logger.info("Auto-creating account '%s' from task config", account_id)
+            new_account = self.cred_manager.add_account(
+                self.accounts,
+                account_id,
+                site=account_config.get("site"),
+                email=account_config.get("email"),
+                password=account_config.get("password", ""),
+                payment_method=account_config.get("payment_method", "credit_card"),
+                monthly_limit=float(account_config.get("monthly_limit", 1000)),
+                price_limit_per_item=float(account_config.get("price_limit_per_item", 500)),
+                price_limit_enabled=account_config.get("price_limit_enabled", True),
+                quantity_limit_per_item=account_config.get("quantity_limit_per_item"),
+                shipping_address=account_config.get("shipping_address"),
+            )
+            
+            # Save to disk
+            if self.cred_manager.save_credentials(self.accounts):
+                logger.info("Account '%s' auto-created and saved successfully", account_id)
+                return self.accounts.get(account_id)
+            else:
+                logger.error("Failed to save auto-created account '%s'", account_id)
+                return None
+        except Exception as exc:
+            logger.error("Error auto-creating account '%s': %s", account_id, exc)
+            return None
+
     def _load_account(self, account_id: str, account_data: dict[str, Any] | None) -> Account | None:
         if account_data is None:
-            logger.error("Account '%s' not found", account_id)
+            available = list(self.accounts.keys())
+            logger.error(
+                "Account '%s' not found. Available accounts: %s",
+                account_id,
+                available if available else "(none)"
+            )
             return None
         try:
             return Account.from_dict(account_id, account_data)

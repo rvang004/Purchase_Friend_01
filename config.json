@@ -1,3 +1,26 @@
 {
-  "tasks": []
+  "tasks": [
+    {
+      "id": "task_3f0417e2",
+      "account_id": "roger_vang",
+      "product_url": "https://www.walmart.com/ip/Pok-mon-TCG-Scarlet-Violet-Destined-Rivals-Pok-mon-Center-Elite-Trainer-Box/15718673510?conditionGroupCode=4&classType=REGULAR&from=/search",
+      "schedule_type": "daily",
+      "run_time": "09:00",
+      "quantity": 1,
+      "enabled": true,
+      "created": "2026-07-22T21:04:20.002076",
+      "last_run": null,
+      "account_config": {
+        "site": "https://www.walmart.com",
+        "email": "YOUR_EMAIL_HERE",
+        "password": "YOUR_PASSWORD_HERE",
+        "payment_method": "credit_card",
+        "monthly_limit": 1000,
+        "price_limit_per_item": 500,
+        "price_limit_enabled": true,
+        "quantity_limit_per_item": null,
+        "shipping_address": null
+      }
+    }
+  ]
 }
