@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 import uvicorn
 
@@ -103,6 +103,13 @@ async def index(request: Request, tab: str = "accounts", msg: str = ""):
 
 # ── accounts ──────────────────────────────────────────────────────────────────
 
+@app.get("/api/accounts")
+async def api_list_accounts():
+    """Return accounts as JSON (for AJAX refresh)."""
+    accounts = load_accounts()
+    print(f"[DEBUG] /api/accounts called, returning {len(accounts)} accounts")
+    return JSONResponse(accounts)
+
 @app.post("/accounts/add")
 async def add_account(
     account_id:          str           = Form(...),
@@ -146,8 +153,17 @@ async def add_account(
     if adapter.strip() and adapter.strip() != "":
         accounts[account_id]["adapter"] = adapter.strip()
     
+    print(f"[DEBUG] Adding account {account_id}")
     save_accounts(accounts)
-    return redirect("accounts")
+    
+    # Verify it was saved
+    verify = load_accounts()
+    if account_id in verify:
+        print(f"[OK] Account {account_id} saved and verified")
+    else:
+        print(f"[ERROR] Account {account_id} was not found after save!")
+    
+    return redirect("accounts", f"Account '{account_id}' added successfully")
 
 
 @app.post("/accounts/delete")
